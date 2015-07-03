@@ -214,7 +214,7 @@ func (b *BoltDB) Get(tx *bolt.Tx, item Item, key []byte) error {
 
 // iterator over all items in a store
 // The item parameter must be a pointer to the value that will get set.
-func (b *BoltDB) ForEach(tx *bolt.Tx, item Item, handler func(key []byte, data Item) error) error {
+func (b *BoltDB) ForEach(tx *bolt.Tx, item Item, handler func(key []byte) error) error {
     store := b.storeFor(item)
     if store == NoStore {
         return ErrNoStore
@@ -224,7 +224,7 @@ func (b *BoltDB) ForEach(tx *bolt.Tx, item Item, handler func(key []byte, data I
         if err != nil {
             return err
         }
-        return handler(key, item)
+        return handler(key)
     })
 }
 

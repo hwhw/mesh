@@ -1,7 +1,6 @@
 package nodedb
 
 import (
-    "github.com/hwhw/mesh/boltdb"
     "github.com/boltdb/bolt"
     "github.com/hwhw/mesh/batadvvis"
     "github.com/hwhw/mesh/gluon"
@@ -66,10 +65,9 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) error {
     // actual link list objects
     linksjs := make([]GraphJSONLink, 0, 100)
 
-    t := &batadvvis.VisV1{}
+    d := &batadvvis.VisV1{}
     err := db.store.View(func(tx *bolt.Tx) error {
-        return db.store.ForEach(tx, t, func(key []byte, i boltdb.Item) error {
-            d := i.(*batadvvis.VisV1)
+        return db.store.ForEach(tx, d, func(key []byte) error {
             // main address is the first element in batadv.VisV1.Ifaces
             maca, _ := db.resolveAlias(tx, d.Ifaces[0].Mac)
             isgateway := db.isGateway(tx, maca)
