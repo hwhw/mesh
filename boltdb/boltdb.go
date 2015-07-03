@@ -298,7 +298,7 @@ func (b *BoltDB) UpdateData(tx *bolt.Tx, storeid StoreID, key []byte, lifetime t
     bundle.Meta.Invalid = now.Add(lifetime)
     err = bk.Put(key, bundle.Encode())
     if err == nil {
-        b.Notify(UpdateNotification{StoreID: storeid, Key: key})
+        go b.Notify(UpdateNotification{StoreID: storeid, Key: append(make([]byte,0), key...)})
     }
     return
 }
@@ -314,7 +314,7 @@ func (b *BoltDB) purge(tx *bolt.Tx, storeid StoreID) error {
         bundle, err := DecodeItemBundle(v)
         if err == nil {
             if bundle.Meta.Invalid.Before(now) {
-                b.Notify(PurgeNotification{StoreID: storeid, Key: k})
+                go b.Notify(PurgeNotification{StoreID: storeid, Key: append(make([]byte,0), k...)})
                 c.Delete()
                 goto startover
             }

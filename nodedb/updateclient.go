@@ -72,7 +72,7 @@ func (db *NodeDB) AlfredUpdate(
             })
             if err == nil {
                 log.Printf("UpdateClient: type %d, success.", packettype)
-                db.store.Notify(success)
+                go db.store.Notify(success)
                 if !wait(db.store, updatewait) {
                     break
                 } else {
