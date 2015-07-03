@@ -37,12 +37,12 @@ var ErrNoStoreForThisType = errors.New("no store for this data type")
 // Settings for the database
 type Settings struct {
     NodeOfflineDuration time.Duration
-    GluonPurge time.Duration
-    VisPurge time.Duration
+    GluonPurge *time.Duration
+    VisPurge *time.Duration
 }
 
 // create a new database instance
-func New(nodeofflineduration, gluonpurge, gluonpurgeint, vispurge, vispurgeint time.Duration, storefile string, logfile string) (*NodeDB, error) {
+func New(nodeofflineduration time.Duration, gluonpurge, gluonpurgeint, vispurge, vispurgeint *time.Duration, storefile string, logfile string) (*NodeDB, error) {
     store, err := boltdb.Open(storefile)
     if err != nil {
         return nil, err
@@ -58,24 +58,25 @@ func New(nodeofflineduration, gluonpurge, gluonpurgeint, vispurge, vispurgeint t
             _, ok := i.(*gluon.NodeInfo)
             return ok
         },
-        &gluonpurgeint)
+        gluonpurgeint)
     store.RegisterStore(Statistics,
         func(i boltdb.Item) bool {
             _, ok := i.(*gluon.Statistics)
             return ok
         },
-        &gluonpurgeint)
-    store.RegisterStore(Gateways, nil, &gluonpurgeint)
+        gluonpurgeint)
+    store.RegisterStore(Gateways, nil, gluonpurgeint)
     store.RegisterStore(VisData,
         func(i boltdb.Item) bool {
             _, ok := i.(*batadvvis.VisV1)
             return ok
         },
-        &vispurgeint)
-    store.RegisterStore(Aliases, nil, &vispurgeint)
+        vispurgeint)
+    store.RegisterStore(Aliases, nil, vispurgeint)
 
     logstore.RegisterStore(Clients, nil, nil)
     logstore.RegisterStore(ClientsSum, nil, nil)
+    logstore.RegisterStore(NodesSum, nil, nil)
 
     db := NodeDB{
         settings: Settings{
@@ -87,23 +88,8 @@ func New(nodeofflineduration, gluonpurge, gluonpurgeint, vispurge, vispurgeint t
         logstore: logstore,
     }
 
-    go func() {
-        // handle certain purge notifications
-        notifications := db.store.Subscribe()
-        defer db.store.Unsubscribe(notifications)
-        for {
-            n := <-notifications
-            switch n := n.(type) {
-            case boltdb.QuitNotification:
-                return
-            case boltdb.PurgeNotification:
-                if n.StoreID == VisData {
-                    // purged vis data means node is offline
-                    db.LogClientsTotal(n.Key, time.Now(), -1)
-                }
-            }
-        }
-    }()
+    // run logging handlers
+    db.Logger()
 
     return &db, nil
 }
@@ -114,13 +100,13 @@ func (db *NodeDB) UpdateMeshData(tx *bolt.Tx, data interface{}, persistent bool,
     // switch depending on data type
     switch data := data.(type) {
     case *gluon.NodeInfo:
-        if !persistent {
-            dur = db.settings.GluonPurge
+        if !persistent && db.settings.GluonPurge != nil {
+            dur = *db.settings.GluonPurge
         }
         _, err = db.store.UpdateItem(tx, data, dur, presetMeta)
     case *gluon.Statistics:
-        if !persistent {
-            dur = db.settings.GluonPurge
+        if !persistent && db.settings.GluonPurge != nil {
+            dur = *db.settings.GluonPurge
         }
         _, err := db.store.UpdateItem(tx, data, dur, presetMeta)
         if err == nil {
@@ -133,8 +119,8 @@ func (db *NodeDB) UpdateMeshData(tx *bolt.Tx, data interface{}, persistent bool,
             err = db.LogClientsTotal(data.Key(), data.TimeStamp, data.Data.Clients.Total)
         }
     case *batadvvis.VisV1:
-        if !persistent {
-            dur = db.settings.VisPurge
+        if !persistent && db.settings.VisPurge != nil {
+            dur = *db.settings.VisPurge
         }
         _, err = db.store.UpdateItem(tx, data, dur, nil)
         if err == nil {

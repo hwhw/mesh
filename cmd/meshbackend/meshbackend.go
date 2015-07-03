@@ -162,10 +162,10 @@ func main() {
     var err error
     db, err = nodedb.New(
         *nodeOfflineDuration,
-        *gluonPurgePtr,
-        *gluonPurgeIntPtr,
-        *batAdvVisPurgePtr,
-        *batAdvVisPurgeIntPtr,
+        gluonPurgePtr,
+        gluonPurgeIntPtr,
+        batAdvVisPurgePtr,
+        batAdvVisPurgeIntPtr,
         *storePtr,
         *logPtr)
 

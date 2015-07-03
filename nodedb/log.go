@@ -2,6 +2,7 @@ package nodedb
 
 import (
     "github.com/hwhw/mesh/boltdb"
+    "github.com/hwhw/mesh/gluon"
     "github.com/boltdb/bolt"
     "log"
     "io"
@@ -125,4 +126,61 @@ func (db *NodeDB) JSONClientsTotal(w io.Writer, key string, until time.Time, int
     enc := json.NewEncoder(w)
     err := enc.Encode(cdoc)
     return err
+}
+
+func (db *NodeDB) LogClientSum() {
+    nodes := 0
+    clients := 0
+    offlinetime := time.Now().Add(-db.settings.NodeOfflineDuration)
+    err := db.store.View(func(tx *bolt.Tx) error {
+        stat := &gluon.Statistics{}
+        return db.store.ForEach(tx, stat, func(key []byte) error {
+            if stat.TimeStamp.Before(offlinetime) {
+                return nil
+            }
+            nodes++
+            if stat.Data.Clients != nil {
+                clients += stat.Data.Clients.Total
+            }
+            // we report success even if we can't find statistics.
+            // thus in these cases, clients can't and won't be counted.
+            return nil
+        })
+    })
+    if err != nil {
+        log.Printf("Logger: error summing nodes/clients: %v", err)
+        return
+    }
+    log.Printf("Logger: %d total nodes, %d total clients", nodes, clients)
+    db.logstore.Update(func(tx *bolt.Tx) error {
+        timestamp := time.Now()
+        timeval, err := timestamp.MarshalBinary()
+        if err != nil {
+            return err
+        }
+        tx.Bucket(boltdb.Storekey(ClientsSum)).Put(timeval, strconv.AppendInt(make([]byte,0,10), int64(clients), 10))
+        tx.Bucket(boltdb.Storekey(NodesSum)).Put(timeval, strconv.AppendInt(make([]byte,0,10), int64(nodes), 10))
+        return nil
+    })
+}
+
+func (db *NodeDB) Logger() {
+    go func() {
+        notifications := db.store.Subscribe()
+        defer db.store.Unsubscribe(notifications)
+        for {
+            n := <-notifications
+            switch n := n.(type) {
+            case boltdb.QuitNotification:
+                return
+            case boltdb.PurgeNotification:
+                if n.StoreID == VisData {
+                    // purged vis data means node is offline
+                    db.LogClientsTotal(n.Key, time.Now(), -1)
+                }
+            case UpdateStatisticsNotification:
+                db.LogClientSum()
+            }
+        }
+    }()
 }
