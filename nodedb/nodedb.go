@@ -1,198 +1,175 @@
-// Package nodedb provides a database that collects information
-// about a mesh network.
-// It is oriented at batman-adv mesh networks using "Gluon" based
-// node metadata.
-// It can update from A.L.F.R.E.D. servers and provide data in
-// formats suitable for mesh visualization, which is its main aim.
+// this file contains data model specific functions
+
 package nodedb
 
 import (
+    "github.com/boltdb/bolt"
+    "github.com/hwhw/mesh/boltdb"
     "github.com/hwhw/mesh/gluon"
     "github.com/hwhw/mesh/batadvvis"
-    "sync"
-    "errors"
     "time"
+    "errors"
 )
 
-var ErrUnknownItem = errors.New("Unknown item")
-var ErrNotFound = errors.New("Item not found")
-
+var LongTime = time.Hour * 24 * 365 * 100 // 100 years should be enough for everyone (famous last words)
 var noTime = time.Time{}
 
-// Database
+// bolt db stores
+const (
+    NodeInfo = iota
+    Statistics
+    Gateways
+    VisData
+    Aliases
+    Clients
+    ClientsSum
+    NodesSum
+)
+
 type NodeDB struct {
-    nodeinfo Store
-    statistics Store
-    visdata Store
-    aliases Store
-    gateways Store
+    store *boltdb.BoltDB
+    logstore *boltdb.BoltDB
     settings Settings
-    tasks []chan struct{}
-    updatesubscriber []chan Update
-    sync.RWMutex
 }
+
+var ErrNoStoreForThisType = errors.New("no store for this data type")
 
 // Settings for the database
 type Settings struct {
     NodeOfflineDuration time.Duration
     GluonPurge time.Duration
-    GluonPurgeInt time.Duration
-    BatAdvVisPurge time.Duration
-    BatAdvVisPurgeInt time.Duration
-    LogStoreFile string
-}
-
-// An item store, indexed by strings
-type Store map[string]Item
-
-// Item in a Store
-type Item struct {
-    item interface{}
-    created time.Time
-    updated time.Time
-}
-
-type Update struct {
-    Store *Store
-    Key string
-    From interface{}
-    To interface{}
+    VisPurge time.Duration
 }
 
 // create a new database instance
-func New(nodeofflineduration, gluonpurge, gluonpurgeint, vispurge, vispurgeint time.Duration, logstorefile string) NodeDB {
+func New(nodeofflineduration, gluonpurge, gluonpurgeint, vispurge, vispurgeint time.Duration, storefile string, logfile string) (*NodeDB, error) {
+    store, err := boltdb.Open(storefile)
+    if err != nil {
+        return nil, err
+    }
+    logstore, err := boltdb.Open(logfile)
+    if err != nil {
+        return nil, err
+    }
+
+    // register stores
+    store.RegisterStore(NodeInfo,
+        func(i boltdb.Item) bool {
+            _, ok := i.(*gluon.NodeInfo)
+            return ok
+        },
+        &gluonpurgeint)
+    store.RegisterStore(Statistics,
+        func(i boltdb.Item) bool {
+            _, ok := i.(*gluon.Statistics)
+            return ok
+        },
+        &gluonpurgeint)
+    store.RegisterStore(Gateways, nil, &gluonpurgeint)
+    store.RegisterStore(VisData,
+        func(i boltdb.Item) bool {
+            _, ok := i.(*batadvvis.VisV1)
+            return ok
+        },
+        &vispurgeint)
+    store.RegisterStore(Aliases, nil, &vispurgeint)
+
+    logstore.RegisterStore(Clients, nil, nil)
+    logstore.RegisterStore(ClientsSum, nil, nil)
+
     db := NodeDB{
-        nodeinfo: make(Store),
-        statistics: make(Store),
-        visdata: make(Store),
-        aliases: make(Store),
-        gateways: make(Store),
         settings: Settings{
             NodeOfflineDuration: nodeofflineduration,
             GluonPurge: gluonpurge,
-            GluonPurgeInt: gluonpurgeint,
-            BatAdvVisPurge: vispurge,
-            BatAdvVisPurgeInt: vispurgeint,
-            LogStoreFile: logstorefile,
+            VisPurge: vispurge,
         },
-        tasks: make([]chan struct{}, 0, 5),
+        store: store,
+        logstore: logstore,
     }
 
-    // database cleanup
-    db.purgeTask(&db.nodeinfo, gluonpurge, gluonpurgeint)
-    db.purgeTask(&db.statistics, gluonpurge, gluonpurgeint)
-    db.purgeTask(&db.gateways, gluonpurge, gluonpurgeint)
-    db.purgeTask(&db.visdata, vispurge, vispurgeint)
-    db.purgeTask(&db.aliases, vispurge, vispurgeint)
-
-    return db
-}
-
-// Wrapper for updating database entries in a Store.
-// Assumes that the caller has already write-locked the
-// database!
-func (db *NodeDB) update(store *Store, id string, data interface{}) {
-    u := Update{Store: store, Key: id, From: struct{}, To: data}
-    db.Lock()
-    item, exists := (*store)[id]
-    if !exists {
-        item = Item{created: time.Now()}
-    } else {
-        u.From = item.item
-    }
-    item.item = data
-    item.updated = time.Now()
-    (*store)[id] = item
-    db.Unlock()
-    for _, c := range db.updatesubscriber {
-        c <- u
-    }
-}
-
-// Purge entries older than "age" from a Store.
-func (db *NodeDB) purge(store *Store, age time.Duration) {
-    purgelist := make([]string, 0, 100)
-    deadline := time.Now().Add(-age)
-    db.Lock()
-    for key, item := range *store {
-        if item.created != noTime && item.updated != noTime && item.updated.Before(deadline) {
-            purgelist = append(purgelist, key)
-        }
-    }
-    for _, key := range purgelist {
-        for _, c := range db.updatesubscriber {
-            c <- Update{Store: store, Key: key, From: store[key], To: struct{}}
-        }
-        delete(*store, key)
-    }
-    db.Unlock()
-}
-
-// Create background task that regularly purges a store
-func (db *NodeDB) purgeTask(store *Store, age time.Duration, interval time.Duration) {
-    quit := db.task()
     go func() {
+        // handle certain purge notifications
+        notifications := db.store.Subscribe()
+        defer db.store.Unsubscribe(notifications)
         for {
-            select {
-            case <-quit:
+            n := <-notifications
+            switch n := n.(type) {
+            case boltdb.QuitNotification:
                 return
-            case <-time.After(interval):
-                db.purge(store, age)
+            case boltdb.PurgeNotification:
+                if n.StoreID == VisData {
+                    // purged vis data means node is offline
+                    db.LogClientsTotal(n.Key, time.Now(), -1)
+                }
             }
         }
     }()
+
+    return &db, nil
 }
 
-// Update gluon.NodeInfo entry
-func (db *NodeDB) UpdateNodeInfo(data gluon.NodeInfo) {
-    db.update(&db.nodeinfo, data.Source.String(), data)
-}
-
-// Update gluon.Statistics entry
-func (db *NodeDB) UpdateStatistics(data gluon.Statistics) {
-    db.update(&db.statistics, data.Source.String(), data)
-    db.update(&db.gateways, data.Data.Gateway.String(), struct{}{})
+// Generic updater function
+func (db *NodeDB) UpdateMeshData(tx *bolt.Tx, data interface{}, persistent bool, presetMeta *boltdb.ItemMeta) (err error) {
+    dur := LongTime // default: keep data for a looooooong time (persistent)
+    // switch depending on data type
+    switch data := data.(type) {
+    case *gluon.NodeInfo:
+        if !persistent {
+            dur = db.settings.GluonPurge
+        }
+        _, err = db.store.UpdateItem(tx, data, dur, presetMeta)
+    case *gluon.Statistics:
+        if !persistent {
+            dur = db.settings.GluonPurge
+        }
+        _, err := db.store.UpdateItem(tx, data, dur, presetMeta)
+        if err == nil {
+            if data.Data.Gateway != nil {
+                _, err = db.store.UpdateData(tx, Gateways, []byte(*data.Data.Gateway), dur, []byte{1}, nil)
+            }
+        }
+        // Update Log
+        if err == nil && data.Data.Clients != nil {
+            err = db.LogClientsTotal(data.Key(), data.TimeStamp, data.Data.Clients.Total)
+        }
+    case *batadvvis.VisV1:
+        if !persistent {
+            dur = db.settings.VisPurge
+        }
+        _, err = db.store.UpdateItem(tx, data, dur, nil)
+        if err == nil {
+            _, err = db.store.UpdateData(tx, Aliases, []byte(data.Mac), dur, data.Key(), nil)
+        }
+        if err == nil {
+            for _, mac := range data.Ifaces {
+                _, err = db.store.UpdateData(tx, Aliases, []byte(mac.Mac), dur, data.Key(), nil)
+                if err != nil {
+                    break
+                }
+            }
+        }
+    default:
+        return ErrNoStoreForThisType
+    }
+    return
 }
 
 // look up main ID for an alias
-// Assumes that the database is already locked.
-func (db *NodeDB) resolveAlias(alias string) (string, bool) {
-    if resolve, ok := db.aliases[alias]; ok {
-        return resolve.item.(string), true
+func (db *NodeDB) resolveAlias(tx *bolt.Tx, alias []byte) ([]byte, bool) {
+    bundle, err := db.store.GetBundle(tx, Aliases, alias)
+    if err != nil {
+        return alias, false
     }
-    return alias, false
+    return bundle.Data, true
 }
 
-// Update batadvvis.VisV1 data entry and update the alias Store, too.
-func (db *NodeDB) UpdateVis(data batadvvis.VisV1) {
-    db.update(&db.visdata, data.Mac.String(), data)
-    mainaddr := data.Ifaces[0].Mac.String()
-    db.update(&db.aliases, data.Mac.String(), mainaddr)
-    for _, mac := range data.Ifaces {
-        db.update(&db.aliases, mac.Mac.String(), mainaddr)
+// check if a given node is a Gateway
+func (db *NodeDB) isGateway(tx *bolt.Tx, addr gluon.HardwareAddr) bool {
+    _, err := db.store.GetBundle(tx, Gateways, addr)
+    if err != nil {
+        return false
+    } else {
+        return true
     }
 }
 
-func (db *NodeDB) task() chan struct{} {
-    t := make(chan struct{})
-    db.Lock()
-    db.tasks = append(db.tasks, t)
-    db.Unlock()
-    return t
-}
-
-func (db *NodeDB) subscribeUpdates(s chan Update) {
-    db.Lock()
-    db.tasks = append(db.updatesubscriber, s)
-    db.Unlock()
-}
-
-// Shut down database, end all running tasks.
-func (db *NodeDB) Close() {
-    db.Lock()
-    for _, t := range db.tasks {
-        t <- struct{}{}
-        close(t)
-    }
-    db.Unlock()
-}

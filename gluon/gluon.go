@@ -12,15 +12,18 @@ import (
 )
 
 var ErrParse = errors.New("parse error")
+var ErrParseMAC = errors.New("error parsing MAC address")
 
 // Wrapper for the MAC addresses found as main identifier.
 type HardwareAddr net.HardwareAddr
 
-func (i HardwareAddr)String() string {
+// wrap printing from net.HardwareAddr
+func (i HardwareAddr) String() string {
     return net.HardwareAddr(i).String()
 }
 
-func (i HardwareAddr)MarshalJSON() ([]byte, error) {
+// JSON encoder for MAC addresses
+func (i HardwareAddr) MarshalJSON() ([]byte, error) {
     buf := new(bytes.Buffer)
     buf.WriteByte('"')
     buf.WriteString(net.HardwareAddr(i).String())
@@ -28,46 +31,38 @@ func (i HardwareAddr)MarshalJSON() ([]byte, error) {
     return buf.Bytes(), nil
 }
 
-func hextoi(b byte) (byte, error) {
-    switch {
-    case b >= 0x30 && b <= 0x39:
-        return b - 0x30, nil
-    case b >= 0x41 && b <= 0x46:
-        return 10 + b - 0x41, nil
-    case b >= 0x61 && b <= 0x66:
-        return 10 + b - 0x61, nil
-    default:
-        return 0, ErrParse
-    }
-}
-
-func (i *HardwareAddr)UnmarshalJSON(val []byte) (error) {
-    if val[0] == '"' {
-        val = val[1:len(val)-1]
-    }
-    mac, err := net.ParseMAC(string(val))
-    if err == nil {
-        *i = HardwareAddr(mac)
-        return nil
-    }
-    if len(val) == 12 {
-        mac = make(net.HardwareAddr, 6)
-        for i := 0; i < 6; i ++ {
-            v, err := hextoi(val[i*2])
-            if err != nil {
-                return err
-            }
-            mac[i] = v * 0x10
-            v, err = hextoi(val[i*2+1])
-            if err != nil {
-                return err
-            }
-            mac[i] += v
+// very forgiving parser for MAC addresses
+func (i *HardwareAddr) UnmarshalJSON(data []byte) error {
+    addr := make([]byte, 6)
+    n := 0
+    v := byte(0)
+    for _, c := range data {
+        switch {
+        case c >= 0x30 && c <= 0x39:
+            v = c - 0x30
+        case c >= 0x41 && c <= 0x46:
+            v = c - 0x41 + 0xA
+        case c >= 0x61 && c <= 0x66:
+            v = c - 0x61 + 0xA
+        default:
+            continue
         }
-        *i = HardwareAddr(mac)
+        if n >= 12 {
+            // more than 12 hex chars
+            return ErrParseMAC
+        }
+        if 0 == n % 2 {
+            addr[n>>1] = v << 4
+        } else {
+            addr[n>>1] += v
+        }
+        n++
+    }
+    if n == 12 {
+        *i = HardwareAddr(addr)
         return nil
     }
-    return ErrParse
+    return ErrParseMAC
 }
 
 // convenience function that will compare packet type and version

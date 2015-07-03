@@ -3,6 +3,8 @@ package gluon
 import (
     "github.com/hwhw/mesh/alfred"
     "net"
+    "encoding/gob"
+    "bytes"
 )
 
 const (
@@ -14,7 +16,7 @@ const (
 
 // wrapper type for storing the metadata and its origin
 type NodeInfo struct {
-    Source  net.HardwareAddr
+    Source  HardwareAddr
     Data    NodeInfoData
 }
 
@@ -76,8 +78,32 @@ type Owner struct {
 }
 
 // read structured information from A.L.F.R.E.D. packet
-func ReadNodeInfo(data alfred.Data) (NodeInfo, error) {
-    ni := NodeInfo{Source: data.Source}
+func ReadNodeInfo(data alfred.Data) (*NodeInfo, error) {
+    ni := NodeInfo{Source: HardwareAddr(data.Source)}
     err := readJSON(data, NODEINFO_PACKETTYPE, NODEINFO_PACKETVERSION, &ni.Data)
-    return ni, err
+    return &ni, err
+}
+
+func (n *NodeInfo) Bytes() ([]byte, error) {
+    itembuf := new(bytes.Buffer)
+    enc := gob.NewEncoder(itembuf)
+    err := enc.Encode(n)
+    if err != nil {
+        return nil, err
+    }
+    return itembuf.Bytes(), nil
+}
+
+func (n *NodeInfo) Key() ([]byte) {
+    return []byte(n.Source)
+}
+
+func (n *NodeInfo) DeserializeFrom(b []byte) error {
+    buf := bytes.NewBuffer(b)
+    dec := gob.NewDecoder(buf)
+    newni := NodeInfo{}
+    err := dec.Decode(&newni)
+    n.Source = newni.Source
+    n.Data = newni.Data
+    return err
 }

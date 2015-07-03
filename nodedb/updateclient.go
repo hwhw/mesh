@@ -1,12 +1,37 @@
 package nodedb
 
 import (
+    "github.com/boltdb/bolt"
+    "github.com/hwhw/mesh/boltdb"
     "github.com/hwhw/mesh/alfred"
     "github.com/hwhw/mesh/gluon"
     "github.com/hwhw/mesh/batadvvis"
     "time"
     "log"
+    "math/rand"
 )
+
+type UpdateVisDataNotification struct{}
+type UpdateNodeInfoNotification struct{}
+type UpdateStatisticsNotification struct{}
+
+// helper: wait for a certain time or quit notification
+func wait(db *boltdb.BoltDB, t time.Duration) bool {
+    notifications := db.Subscribe()
+    defer db.Unsubscribe(notifications)
+    waiter := time.After(t)
+    for {
+        select {
+        case n := <-notifications:
+            switch n.(type) {
+            case boltdb.QuitNotification:
+                return false
+            }
+        case <-waiter:
+            return true
+        }
+    }
+}
 
 // Create a new update client.
 // Give the network (unix, tcp) in network, the address to connect to in address,
@@ -14,77 +39,66 @@ import (
 // before retrying in retrywait.
 // The updatewait duration is also the timeout duration for the actual
 // network connections.
-func (db *NodeDB) NewUpdateClient(network string, address string, updatewait time.Duration, retrywait time.Duration) {
-    quit := db.task()
-    go func() {
-        client := alfred.NewClient(network, address, updatewait)
-        for {
-            log.Printf("UpdateClient: Updating data from alfred server")
-            retrybatadvvis:
-            data, err := client.Request(batadvvis.PACKETTYPE)
-            if err == nil {
+func (db *NodeDB) AlfredUpdate(
+    network string, address string,
+    updatewait time.Duration, retrywait time.Duration,
+    packettype uint8,
+    reader func(alfred.Data) (interface{}, error),
+    success boltdb.Notification) {
+
+    client := alfred.NewClient(network, address, updatewait)
+
+    // write a random 0..updatewait at startup
+    if !wait(db.store, time.Duration(rand.Float64() * float64(updatewait))) {
+        return
+    }
+    for {
+        log.Printf("UpdateClient: Updating data from alfred server for type %d", packettype)
+        data, err := client.Request(packettype)
+        if err == nil {
+            err = db.store.Update(func(tx *bolt.Tx) error {
                 for _, d := range data {
-                    vis, err := batadvvis.Read(d)
+                    parsed, err := reader(d)
                     if err != nil {
-                        log.Printf("UpdateClient: batadv-vis parse error: %+v (data: %+v)", err, d)
+                        log.Printf("UpdateClient: type %d, parse error: %+v (data: %+v)", packettype, err, d)
                     } else {
-                        db.UpdateVis(vis)
+                        err = db.UpdateMeshData(tx, parsed, false, nil)
+                        if err != nil {
+                            log.Printf("UpdateClient: type %d, problem while updating data: %v", packettype, err)
+                        }
                     }
                 }
-            } else {
-                log.Printf("UpdateClient: Error fetching batadv-vis data, retrying in %s", retrywait)
-                if !(wait(retrywait, quit)) { return }
-                goto retrybatadvvis
-            }
-
-            retrynodeinfo:
-            data, err = client.Request(gluon.NODEINFO_PACKETTYPE)
+                return nil
+            })
             if err == nil {
-                for _, d := range data {
-                    ni, err := gluon.ReadNodeInfo(d)
-                    if err != nil {
-                        log.Printf("UpdateClient: Gluon nodeinfo parse error: %+v (data: %+v)", err, d)
-                    } else {
-                        db.UpdateNodeInfo(ni)
-                    }
+                log.Printf("UpdateClient: type %d, success.", packettype)
+                db.store.Notify(success)
+                if !wait(db.store, updatewait) {
+                    break
+                } else {
+                    continue
                 }
-            } else {
-                log.Printf("UpdateClient: Error fetching nodeinfo data, retrying in %s", retrywait)
-                if !(wait(retrywait, quit)) { return }
-                goto retrynodeinfo
             }
-
-            retrystatistics:
-            data, err = client.Request(gluon.STATISTICS_PACKETTYPE)
-            if err == nil {
-                for _, d := range data {
-                    s, err := gluon.ReadStatistics(d)
-                    if err != nil {
-                        log.Printf("UpdateClient: Gluon statistics parse error: %+v (data: %+v)", err, d)
-                    } else {
-                        db.UpdateStatistics(s)
-                    }
-                }
-            } else {
-                log.Printf("UpdateClient: Error fetching statistics data, retrying in %s", retrywait)
-                if !(wait(retrywait, quit)) { return }
-                goto retrystatistics
-            }
-
-            log.Printf("UpdateClient: Done updating from alfred server, sleeping %s", updatewait)
-            if updated != nil {
-                (*updated)()
-            }
-            if !(wait(updatewait, quit)) { return }
+        } else {
+            log.Printf("UpdateClient: type %d, error fetching data", packettype)
         }
-    }()
+        if !wait(db.store, retrywait) {
+            break
+        }
+    }
 }
 
-func wait(t time.Duration, quit chan struct{}) bool {
-    select {
-    case <-quit:
-        return false
-    case <-time.After(t):
-        return true
-    }
+func (db *NodeDB) NewUpdateClient(network string, address string, updatewait time.Duration, retrywait time.Duration) {
+    go db.AlfredUpdate(network, address, updatewait, retrywait,
+        batadvvis.PACKETTYPE,
+        func(a alfred.Data) (interface{}, error) { return batadvvis.Read(a) },
+        UpdateVisDataNotification{})
+    go db.AlfredUpdate(network, address, updatewait, retrywait,
+        gluon.NODEINFO_PACKETTYPE,
+        func(a alfred.Data) (interface{}, error) { return gluon.ReadNodeInfo(a) },
+        UpdateNodeInfoNotification{})
+    go db.AlfredUpdate(network, address, updatewait, retrywait,
+        gluon.STATISTICS_PACKETTYPE,
+        func(a alfred.Data) (interface{}, error) { return gluon.ReadStatistics(a) },
+        UpdateStatisticsNotification{})
 }

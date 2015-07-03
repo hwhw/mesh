@@ -8,6 +8,7 @@ import (
     "bufio"
     "errors"
     "time"
+//    "log"
 )
 
 var ErrStatus = errors.New("A.L.F.R.E.D. server reported an error")
@@ -60,11 +61,11 @@ func (c Client) Request(requestedtype uint8) (data []Data, err error) {
         switch err {
         case nil:
             conn.SetDeadline(time.Now().Add(c.timeout))
-            if pd, ok := pkg.(PushDataV0); ok {
+            if pd, ok := pkg.(*PushDataV0); ok {
                 for _, d := range pd.Data {
                     data = append(data, d)
                 }
-            } else if status, ok := pkg.(StatusV0); ok && status.Header.Type == ALFRED_STATUS_ERROR {
+            } else if status, ok := pkg.(*StatusV0); ok && status.Header.Type == ALFRED_STATUS_ERROR {
                 return data, ErrStatus
             } else {
                 return data, ErrProtocol
