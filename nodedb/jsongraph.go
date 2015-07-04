@@ -3,8 +3,8 @@ package nodedb
 import (
 	"encoding/json"
 	"github.com/boltdb/bolt"
-	"github.com/hwhw/mesh/batadvvis"
-	"github.com/hwhw/mesh/gluon"
+	"github.com/hwhw/mesh/alfred"
+	"github.com/hwhw/mesh/store"
 	"io"
 )
 
@@ -24,8 +24,8 @@ type GraphJSONBatAdv struct {
 
 // Information about the existence of a mesh node
 type GraphJSONNode struct {
-	NodeID gluon.HardwareAddr `json:"node_id,omitempty"`
-	ID     gluon.HardwareAddr `json:"id"`
+	NodeID alfred.HardwareAddr `json:"node_id,omitempty"`
+	ID     alfred.HardwareAddr `json:"id"`
 }
 
 // Information about a link.
@@ -39,17 +39,28 @@ type GraphJSONLink struct {
 	Tq       float64 `json:"tq"`
 }
 
-func NewGraphJSONNode(id gluon.HardwareAddr, nodeid gluon.HardwareAddr) GraphJSONNode {
-	idcopy := make(gluon.HardwareAddr, len(id))
+func NewGraphJSONNode(id alfred.HardwareAddr, nodeid alfred.HardwareAddr) GraphJSONNode {
+	idcopy := make(alfred.HardwareAddr, len(id))
 	copy(idcopy, id)
-	nodeidcopy := make(gluon.HardwareAddr, len(nodeid))
+	nodeidcopy := make(alfred.HardwareAddr, len(nodeid))
 	copy(nodeidcopy, nodeid)
 	return GraphJSONNode{ID: idcopy, NodeID: nodeidcopy}
 }
-func NewGraphJSONNodeIDonly(id gluon.HardwareAddr) GraphJSONNode {
-	idcopy := make(gluon.HardwareAddr, len(id))
+func NewGraphJSONNodeIDonly(id alfred.HardwareAddr) GraphJSONNode {
+	idcopy := make(alfred.HardwareAddr, len(id))
 	copy(idcopy, id)
 	return GraphJSONNode{ID: idcopy}
+}
+
+func (db *NodeDB) resolveAlias(tx *bolt.Tx, alias alfred.HardwareAddr) alfred.HardwareAddr {
+    a := &Alias{}
+    m := store.NewMeta(a)
+    if db.Main.Get(tx, alias, m) != nil && m.GetItem(a) != nil {
+        if bytes, err := a.Bytes(); err == nil {
+            return alfred.HardwareAddr(bytes)
+        }
+    }
+    return alias
 }
 
 // Write a full graph.json document based on the contents of
@@ -65,21 +76,25 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) error {
 	// actual link list objects
 	linksjs := make([]GraphJSONLink, 0, 100)
 
-	d := &batadvvis.VisV1{}
-	err := db.store.View(func(tx *bolt.Tx) error {
-		return db.store.ForEach(tx, d, func(key []byte) error {
+	d := &VisData{}
+    m := store.NewMeta(d)
+	err := db.Main.View(func(tx *bolt.Tx) error {
+		return db.Main.ForEach(tx, m, func(cursor *bolt.Cursor) (bool, error) {
+            if m.GetItem(d) != nil {
+                // skip unparseable items
+                return false, nil
+            }
 			// main address is the first element in batadv.VisV1.Ifaces
-			maca, _ := db.resolveAlias(tx, d.Ifaces[0].Mac)
-			isgateway := db.isGateway(tx, maca)
-			mac := string(maca)
+			mac := db.resolveAlias(tx, d.Ifaces[0].Mac)
+			isgateway := db.Main.Exists(tx, mac, &Gateway{})
 			nodeid := d.Mac
-			if _, seen := nodes[mac]; !seen {
+			if _, seen := nodes[mac.String()]; !seen {
 				// new node, put into lists
-				nodes[mac] = len(nodesjs)
-				nodesjs = append(nodesjs, NewGraphJSONNode(gluon.HardwareAddr(maca), gluon.HardwareAddr(nodeid)))
+				nodes[mac.String()] = len(nodesjs)
+				nodesjs = append(nodesjs, NewGraphJSONNode(mac, nodeid))
 			} else {
 				// record node_id, since we only get that here
-				nodesjs[nodes[mac]].NodeID = gluon.HardwareAddr(nodeid)
+				nodesjs[nodes[mac.String()]].NodeID = nodeid
 			}
 
 			nodelinks := make(map[string]GraphJSONLink)
@@ -89,36 +104,35 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) error {
 					continue
 				}
 
-				emaca, _ := db.resolveAlias(tx, []byte(entry.Mac))
-				emac := string(emaca)
-				if _, seen := nodes[emac]; !seen {
+				emac := db.resolveAlias(tx, []byte(entry.Mac))
+				if _, seen := nodes[emac.String()]; !seen {
 					// linked node is a new node, also put into lists since it has to exist
-					nodes[emac] = len(nodesjs)
-					nodesjs = append(nodesjs, NewGraphJSONNodeIDonly(gluon.HardwareAddr(emaca)))
+					nodes[emac.String()] = len(nodesjs)
+					nodesjs = append(nodesjs, NewGraphJSONNodeIDonly(emac))
 				}
 
 				// do a cross check: did we already record an entry for the
 				// reverse direction? If so, mark it as being birectional
 				// and recalculate the link quality value
-				if rev, exists := links[emac]; exists {
-					if rrev, exists := rev[mac]; exists {
+				if rev, exists := links[emac.String()]; exists {
+					if rrev, exists := rev[mac.String()]; exists {
 						if isgateway {
 							rrev.Vpn = true
 						}
 						rrev.Bidirect = true
 						// middle value for now - or should we chose bigger (worse) value?
 						rrev.Tq = (rrev.Tq + 255.0/float64(entry.Qual)) / 2
-						links[emac][mac] = rrev
+						links[emac.String()][mac.String()] = rrev
 						continue
 					}
 				}
 
 				// new link, record it
-				nodelinks[emac] = GraphJSONLink{Tq: 255.0 / float64(entry.Qual), Vpn: isgateway}
+				nodelinks[emac.String()] = GraphJSONLink{Tq: 255.0 / float64(entry.Qual), Vpn: isgateway}
 			}
 
-			links[mac] = nodelinks
-			return nil
+			links[mac.String()] = nodelinks
+			return false, nil
 		})
 	})
 	if err != nil {

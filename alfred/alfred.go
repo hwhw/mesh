@@ -7,6 +7,7 @@
 package alfred
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -40,6 +41,13 @@ const (
 
 var ErrTooLarge = errors.New("data chunk is too large to fit into packet")
 var ErrUnknownType = errors.New("unknown data type")
+var ErrParseMAC = errors.New("error parsing MAC address")
+
+// interface for data that is being transported via A.L.F.R.E.D.
+type Content interface {
+	GetPacketType() uint8
+	ReadAlfred(Data) error
+}
 
 type Packet interface {
 	// write the packet to the io.Writer, return an error if anything
@@ -84,7 +92,7 @@ func (t *TLV) Size() int {
 // of A.L.F.R.E.D.
 type Data struct {
 	// origin of the data
-	Source net.HardwareAddr
+	Source HardwareAddr
 	// descriptor for the data
 	Header *TLV
 	// the actual data
@@ -456,4 +464,55 @@ func Read(r io.Reader) (Packet, error, int) {
 	default:
 		return tlv, ErrUnknownType, read
 	}
+}
+
+// Wrapper for the MAC addresses found as main identifier.
+type HardwareAddr net.HardwareAddr
+
+// wrap printing from net.HardwareAddr
+func (i HardwareAddr) String() string {
+	return net.HardwareAddr(i).String()
+}
+
+// JSON encoder for MAC addresses
+func (i HardwareAddr) MarshalJSON() ([]byte, error) {
+	buf := new(bytes.Buffer)
+	buf.WriteByte('"')
+	buf.WriteString(net.HardwareAddr(i).String())
+	buf.WriteByte('"')
+	return buf.Bytes(), nil
+}
+
+// very forgiving parser for MAC addresses
+func (i *HardwareAddr) UnmarshalJSON(data []byte) error {
+	addr := make([]byte, 6)
+	n := 0
+	v := byte(0)
+	for _, c := range data {
+		switch {
+		case c >= 0x30 && c <= 0x39:
+			v = c - 0x30
+		case c >= 0x41 && c <= 0x46:
+			v = c - 0x41 + 0xA
+		case c >= 0x61 && c <= 0x66:
+			v = c - 0x61 + 0xA
+		default:
+			continue
+		}
+		if n >= 12 {
+			// more than 12 hex chars
+			return ErrParseMAC
+		}
+		if 0 == n%2 {
+			addr[n>>1] = v << 4
+		} else {
+			addr[n>>1] += v
+		}
+		n++
+	}
+	if n == 12 {
+		*i = HardwareAddr(addr)
+		return nil
+	}
+	return ErrParseMAC
 }

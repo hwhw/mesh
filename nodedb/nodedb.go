@@ -3,158 +3,101 @@
 package nodedb
 
 import (
-	"errors"
-	"github.com/boltdb/bolt"
-	"github.com/hwhw/mesh/batadvvis"
-	"github.com/hwhw/mesh/boltdb"
-	"github.com/hwhw/mesh/gluon"
+	"github.com/hwhw/mesh/alfred"
+	"github.com/hwhw/mesh/store"
+	"github.com/tv42/topic"
 	"time"
 )
 
-var LongTime = time.Hour * 24 * 365 * 100 // 100 years should be enough for everyone (famous last words)
-var noTime = time.Time{}
-
-// bolt db stores
-const (
-	NodeInfo = iota
-	Statistics
-	Gateways
-	VisData
-	Aliases
-	Clients
-	ClientsSum
-	NodesSum
-)
-
 type NodeDB struct {
-	store    *boltdb.BoltDB
-	logstore *boltdb.BoltDB
-	settings Settings
+	Main                   *store.DB
+	Logs                   *store.DB
+	NotifyPurgeVis         *topic.Topic
+	NotifyUpdateNodeInfo   *topic.Topic
+	NotifyUpdateStatistics *topic.Topic
+	NotifyUpdateVis        *topic.Topic
+	NotifyQuitUpdater      *topic.Topic
+	NotifyQuitPurger       *topic.Topic
+	NotifyQuitLogger       *topic.Topic
+	NotifyQuitGenerateJSON *topic.Topic
+	validTimeGluon         time.Duration
+	validTimeVisData       time.Duration
 }
 
-var ErrNoStoreForThisType = errors.New("no store for this data type")
-
-// Settings for the database
-type Settings struct {
-	NodeOfflineDuration time.Duration
-	GluonPurge          *time.Duration
-	VisPurge            *time.Duration
-}
+var DefaultValidityGluon = time.Hour * 24 * 30
+var DefaultValidityVis = time.Minute * 20
 
 // create a new database instance
-func New(nodeofflineduration time.Duration, gluonpurge, gluonpurgeint, vispurge, vispurgeint *time.Duration, storefile string, logfile string) (*NodeDB, error) {
-	store, err := boltdb.Open(storefile)
+func New(gluonvalid, visvalid time.Duration, storefile string, logfile string) (*NodeDB, error) {
+	main, err := store.Open(storefile)
 	if err != nil {
 		return nil, err
 	}
-	logstore, err := boltdb.Open(logfile)
+	logs, err := store.Open(logfile)
 	if err != nil {
 		return nil, err
 	}
-
-	// register stores
-	store.RegisterStore(NodeInfo,
-		func(i boltdb.Item) bool {
-			_, ok := i.(*gluon.NodeInfo)
-			return ok
-		},
-		gluonpurgeint)
-	store.RegisterStore(Statistics,
-		func(i boltdb.Item) bool {
-			_, ok := i.(*gluon.Statistics)
-			return ok
-		},
-		gluonpurgeint)
-	store.RegisterStore(Gateways, nil, gluonpurgeint)
-	store.RegisterStore(VisData,
-		func(i boltdb.Item) bool {
-			_, ok := i.(*batadvvis.VisV1)
-			return ok
-		},
-		vispurgeint)
-	store.RegisterStore(Aliases, nil, vispurgeint)
-
-	logstore.RegisterStore(Clients, nil, nil)
-	logstore.RegisterStore(ClientsSum, nil, nil)
-	logstore.RegisterStore(NodesSum, nil, nil)
 
 	db := NodeDB{
-		settings: Settings{
-			NodeOfflineDuration: nodeofflineduration,
-			GluonPurge:          gluonpurge,
-			VisPurge:            vispurge,
-		},
-		store:    store,
-		logstore: logstore,
+		Main:                   main,
+		Logs:                   logs,
+		NotifyPurgeVis:         topic.New(),
+		NotifyUpdateNodeInfo:   topic.New(),
+		NotifyUpdateStatistics: topic.New(),
+		NotifyUpdateVis:        topic.New(),
+		NotifyQuitUpdater:      topic.New(),
+		NotifyQuitPurger:       topic.New(),
+		NotifyQuitLogger:       topic.New(),
+		NotifyQuitGenerateJSON: topic.New(),
+		validTimeGluon:         gluonvalid,
+		validTimeVisData:       visvalid,
 	}
 
-	// run logging handlers
-	db.Logger()
+	/*
+		// run logging handlers
+		db.Logger()
+	*/
 
 	return &db, nil
 }
 
-// Generic updater function
-func (db *NodeDB) UpdateMeshData(tx *bolt.Tx, data interface{}, persistent bool, presetMeta *boltdb.ItemMeta) (err error) {
-	dur := LongTime // default: keep data for a looooooong time (persistent)
-	// switch depending on data type
-	switch data := data.(type) {
-	case *gluon.NodeInfo:
-		if !persistent && db.settings.GluonPurge != nil {
-			dur = *db.settings.GluonPurge
-		}
-		_, err = db.store.UpdateItem(tx, data, dur, presetMeta)
-	case *gluon.Statistics:
-		if !persistent && db.settings.GluonPurge != nil {
-			dur = *db.settings.GluonPurge
-		}
-		_, err := db.store.UpdateItem(tx, data, dur, presetMeta)
-		if err == nil {
-			if data.Data.Gateway != nil {
-				_, err = db.store.UpdateData(tx, Gateways, []byte(*data.Data.Gateway), dur, []byte{1}, nil)
-			}
-		}
-		// Update Log
-		if err == nil && data.Data.Clients != nil {
-			err = db.LogClientsTotal(data.Key(), data.TimeStamp, data.Data.Clients.Total)
-		}
-	case *batadvvis.VisV1:
-		if !persistent && db.settings.VisPurge != nil {
-			dur = *db.settings.VisPurge
-		}
-		_, err = db.store.UpdateItem(tx, data, dur, nil)
-		if err == nil {
-			_, err = db.store.UpdateData(tx, Aliases, []byte(data.Mac), dur, data.Key(), nil)
-		}
-		if err == nil {
-			for _, mac := range data.Ifaces {
-				_, err = db.store.UpdateData(tx, Aliases, []byte(mac.Mac), dur, data.Key(), nil)
-				if err != nil {
-					break
-				}
-			}
-		}
-	default:
-		return ErrNoStoreForThisType
-	}
-	return
+func (db *NodeDB) StartPurger(gluonpurgeint, vispurgeint time.Duration) {
+	go db.Main.Purger(&NodeInfo{}, gluonpurgeint, db.NotifyQuitPurger, nil)
+	go db.Main.Purger(&Statistics{}, gluonpurgeint, db.NotifyQuitPurger, nil)
+	go db.Main.Purger(&VisData{}, vispurgeint, db.NotifyQuitPurger, db.NotifyPurgeVis)
+	go db.Main.Purger(&Gateway{}, vispurgeint, db.NotifyQuitPurger, nil)
+	go db.Main.Purger(&Alias{}, vispurgeint, db.NotifyQuitPurger, nil)
 }
 
-// look up main ID for an alias
-func (db *NodeDB) resolveAlias(tx *bolt.Tx, alias []byte) ([]byte, bool) {
-	bundle, err := db.store.GetBundle(tx, Aliases, alias)
-	if err != nil {
-		return alias, false
-	}
-	return bundle.Data, true
+func (db *NodeDB) StopPurger() {
+	db.NotifyQuitPurger.Broadcast <- struct{}{}
 }
 
-// check if a given node is a Gateway
-func (db *NodeDB) isGateway(tx *bolt.Tx, addr gluon.HardwareAddr) bool {
-	_, err := db.store.GetBundle(tx, Gateways, addr)
-	if err != nil {
-		return false
-	} else {
-		return true
-	}
+func (db *NodeDB) StartLogger(offlineAfter time.Duration) {
+    go db.LogCounts(offlineAfter)
+}
+
+func (db *NodeDB) StopLogger() {
+    db.NotifyQuitLogger.Broadcast <- struct{}{}
+}
+
+func (db *NodeDB) StartUpdater(client *alfred.Client, updatewait, retrywait time.Duration) {
+	i := &NodeInfo{}
+	go client.Updater(i, updatewait, retrywait, db.NotifyQuitUpdater, db.NotifyUpdateNodeInfo, db.updateNodeInfo(i, false))
+	s := &Statistics{}
+	go client.Updater(s, updatewait, retrywait, db.NotifyQuitUpdater, db.NotifyUpdateStatistics, db.updateStatistics(s))
+	v := &VisData{}
+	go client.Updater(v, updatewait, retrywait, db.NotifyQuitUpdater, db.NotifyUpdateVis, db.updateVisData(v))
+}
+
+func (db *NodeDB) StopUpdater() {
+	db.NotifyQuitUpdater.Broadcast <- struct{}{}
+}
+
+func (db *NodeDB) StartGenerateJSON(directory string, offlineDuration time.Duration) {
+    go db.GenerateJSON(directory, offlineDuration)
+}
+
+func (db *NodeDB) StopGenerateJSON() {
+	db.NotifyQuitGenerateJSON.Broadcast <- struct{}{}
 }

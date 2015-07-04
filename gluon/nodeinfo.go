@@ -1,8 +1,6 @@
 package gluon
 
 import (
-	"bytes"
-	"encoding/gob"
 	"github.com/hwhw/mesh/alfred"
 	"net"
 )
@@ -16,25 +14,25 @@ const (
 
 // wrapper type for storing the metadata and its origin
 type NodeInfo struct {
-	Source HardwareAddr
-	Data   NodeInfoData
+	Source alfred.HardwareAddr
+	Data   *NodeInfoData
 }
 
 // mesh node metadata
 type NodeInfoData struct {
-	NodeID   HardwareAddr `json:"node_id,omitempty"`
-	Network  *Network     `json:"network,omitempty"`
-	Hostname string       `json:"hostname,omitempty"`
-	Location *Location    `json:"location,omitempty"`
-	Software *Software    `json:"software,omitempty"`
-	Hardware *Hardware    `json:"hardware,omitempty"`
-	Owner    *Owner       `json:"owner,omitempty"`
+	NodeID   alfred.HardwareAddr `json:"node_id,omitempty"`
+	Network  *Network            `json:"network,omitempty"`
+	Hostname string              `json:"hostname,omitempty"`
+	Location *Location           `json:"location,omitempty"`
+	Software *Software           `json:"software,omitempty"`
+	Hardware *Hardware           `json:"hardware,omitempty"`
+	Owner    *Owner              `json:"owner,omitempty"`
 }
 
 type Network struct {
-	Mac            string         `json:"mac,omitempty"`
-	Addresses      []net.IP       `json:"addresses,omitempty"`
-	MeshInterfaces []HardwareAddr `json:"mesh_interfaces,omitempty"`
+	Mac            string                `json:"mac,omitempty"`
+	Addresses      []net.IP              `json:"addresses,omitempty"`
+	MeshInterfaces []alfred.HardwareAddr `json:"mesh_interfaces,omitempty"`
 }
 
 type Location struct {
@@ -78,32 +76,12 @@ type Owner struct {
 }
 
 // read structured information from A.L.F.R.E.D. packet
-func ReadNodeInfo(data alfred.Data) (*NodeInfo, error) {
-	ni := NodeInfo{Source: HardwareAddr(data.Source)}
-	err := readJSON(data, NODEINFO_PACKETTYPE, NODEINFO_PACKETVERSION, &ni.Data)
-	return &ni, err
+func (ni *NodeInfo) ReadAlfred(data alfred.Data) error {
+	ni.Source = alfred.HardwareAddr(data.Source)
+    ni.Data = &NodeInfoData{}
+	return readJSON(data, NODEINFO_PACKETTYPE, NODEINFO_PACKETVERSION, ni.Data)
 }
 
-func (n *NodeInfo) Bytes() ([]byte, error) {
-	itembuf := new(bytes.Buffer)
-	enc := gob.NewEncoder(itembuf)
-	err := enc.Encode(n)
-	if err != nil {
-		return nil, err
-	}
-	return itembuf.Bytes(), nil
-}
-
-func (n *NodeInfo) Key() []byte {
-	return []byte(n.Source)
-}
-
-func (n *NodeInfo) DeserializeFrom(b []byte) error {
-	buf := bytes.NewBuffer(b)
-	dec := gob.NewDecoder(buf)
-	newni := NodeInfo{}
-	err := dec.Decode(&newni)
-	n.Source = newni.Source
-	n.Data = newni.Data
-	return err
+func (ni *NodeInfo) GetPacketType() uint8 {
+	return NODEINFO_PACKETTYPE
 }
