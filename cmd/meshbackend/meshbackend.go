@@ -1,15 +1,11 @@
 package main
 
 import (
-	"compress/gzip"
 	"flag"
 	"github.com/hwhw/mesh/nodedb"
 	"github.com/hwhw/mesh/alfred"
-	"io"
+	"github.com/hwhw/mesh/webservice"
 	"log"
-	"net/http"
-	"runtime/debug"
-	"strings"
 	"time"
 )
 
@@ -81,85 +77,6 @@ var importNodesPersistentPtr = flag.String(
 		"read nodes from this nodes.json compatible file and do not ever drop the records in there")
 */
 
-func handler_dyn_nodes_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	if err := db.GenerateNodesJSON(w, *nodeOfflineDuration); err != nil {
-		panic(err)
-	}
-}
-
-func handler_dyn_graph_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	if err := db.GenerateGraphJSON(w); err != nil {
-		panic(err)
-	}
-}
-
-func handler_export_nodeinfo_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	db.ExportNodeInfo(w)
-}
-
-func handler_export_statistics_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	db.ExportStatistics(w)
-}
-
-func handler_export_visdata_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	db.ExportVisData(w)
-}
-
-func HTTPError(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if rec := recover(); rec != nil {
-				http.Error(w, "Internal Server Error", 500)
-				log.Printf("Error: %+v\nTrace:\n%s", rec, debug.Stack())
-			}
-		}()
-		handler.ServeHTTP(w, r)
-	})
-}
-
-func HTTPLog(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		handler.ServeHTTP(w, r)
-		end := time.Now()
-        log.Printf("HTTP: %s %s %s (%s)", r.RemoteAddr, r.Method, r.URL, end.Sub(start))
-	})
-}
-
-type gzipResponseWriter struct {
-	io.Writer
-	http.ResponseWriter
-}
-
-func (w gzipResponseWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
-
-func compressible(path string) bool {
-	if strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".json") || strings.HasSuffix(path, ".html") || strings.HasSuffix(path, ".css") {
-		return true
-	}
-	return false
-}
-
-func HTTPGzip(handler http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") || !compressible(r.URL.Path) {
-			handler.ServeHTTP(w, r)
-		} else {
-			w.Header().Set("Content-Encoding", "gzip")
-			gz := gzip.NewWriter(w)
-			defer gz.Close()
-			gzw := gzipResponseWriter{Writer: gz, ResponseWriter: w}
-			handler.ServeHTTP(gzw, r)
-		}
-	})
-}
 
 func main() {
 	flag.Parse()
@@ -202,22 +119,6 @@ func main() {
 		}
         select {}
 	} else {
-		if *jsonDirPtr != "" {
-			http.Handle("/json/", http.StripPrefix("/json/", http.FileServer(http.Dir(*jsonDirPtr))))
-		} else {
-			// generate JSON data on the fly
-			http.HandleFunc("/json/nodes.json", handler_dyn_nodes_json)
-			http.HandleFunc("/json/graph.json", handler_dyn_graph_json)
-		}
-
-        http.HandleFunc("/json/export/nodeinfo.json", handler_export_nodeinfo_json)
-        http.HandleFunc("/json/export/statistics.json", handler_export_statistics_json)
-        http.HandleFunc("/json/export/visdata.json", handler_export_visdata_json)
-
-		http.Handle("/", http.FileServer(http.Dir(*httpdStaticPtr)))
-
-		log.Printf("MeshData database HTTP server listening on %s", *httpPtr)
-
-		http.ListenAndServe(*httpPtr, HTTPLog(HTTPError(HTTPGzip(http.DefaultServeMux))))
+        webservice.Run(db, *httpPtr, *httpdStaticPtr, *jsonDirPtr, *nodeOfflineDuration)
 	}
 }
