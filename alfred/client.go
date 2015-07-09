@@ -2,8 +2,6 @@ package alfred
 
 import (
 	"bufio"
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"github.com/tv42/topic"
 	"io"
@@ -14,12 +12,6 @@ import (
 
 var ErrStatus = errors.New("A.L.F.R.E.D. server reported an error")
 var ErrProtocol = errors.New("Bad data received from A.L.F.R.E.D. server")
-
-// wrapper for getting a random uint16 used for transaction IDs
-func getRandomId() (randval uint16) {
-	binary.Read(rand.Reader, binary.LittleEndian, &randval)
-	return
-}
 
 // An A.L.F.R.E.D. client.
 //
