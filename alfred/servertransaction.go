@@ -27,10 +27,10 @@ type transaction struct {
 // then it will check if the transaction was fully received and if so,
 // it will store the data to the database.
 func (s *Server) startTransaction(id uint16, done chan<- struct{}, islocal bool) *transaction {
-    feed := make(chan *PushDataV0)
-    abort := make(chan interface{})
-    complete := make(chan uint16)
-    reallycomplete := make(chan uint16)
+    feed := make(chan *PushDataV0, 1)
+    abort := make(chan interface{}, 1)
+    complete := make(chan uint16, 1)
+    reallycomplete := make(chan uint16, 1)
     t := &transaction{
         start: time.Now(),
         feed: feed,
@@ -54,12 +54,7 @@ func (s *Server) startTransaction(id uint16, done chan<- struct{}, islocal bool)
                         goto wait
                     }
                 }
-                // spawn a sub-task to avoid blocking here
-                s.wg.Add(1)
-                go func() {
-                    defer s.wg.Done()
-                    reallycomplete <- finalseq
-                }()
+                reallycomplete <- finalseq
                 break
             wait:
                 // wait some time even after being marked as complete
@@ -156,6 +151,9 @@ func (s *Server) purgeTransactionTask(age time.Duration, interval time.Duration)
             select {
             case <-quit:
                 s.Lock()
+                for _, t := range s.transactions {
+                    t.abort <- struct{}{}
+                }
                 s.transactions = make(map[uint16]*transaction)
                 s.Unlock()
                 return
@@ -166,6 +164,7 @@ func (s *Server) purgeTransactionTask(age time.Duration, interval time.Duration)
                 for k, t := range s.transactions {
                     if t.start.Before(maxage) {
                         log.Printf("alfred/server: transaction %v timed out unfinished.", k)
+                        t.abort <- struct{}{}
                         delete(s.transactions, k)
                         goto restart
                     }

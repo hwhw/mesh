@@ -158,7 +158,7 @@ func (s *Server) readUDP(l *listenerUDP) error {
             log.Printf("alfred/server: got master announcement from %+v on %+v", src, l)
             s.addMaster(l, src)
         case *PushDataV0:
-            log.Printf("alfred/server: got push data %+v %+v %+v", pkg.Header, pkg.Tx, pkg.Data)
+            log.Printf("alfred/server: got push data, transaction %+v", pkg.Tx)
             t := s.getTransaction(pkg.Tx.Id, false)
             t.feed <- pkg
         case *StatusV0:
