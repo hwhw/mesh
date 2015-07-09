@@ -128,61 +128,61 @@ type Counter interface {
 }
 
 type Count struct {
-	timestamp time.Time
-	count   int
+	Timestamp time.Time
+	Count   int
 }
 
 func (n *Count) Key() []byte {
-	m, err := n.timestamp.MarshalBinary()
+	m, err := n.Timestamp.MarshalBinary()
 	if err != nil {
 		panic("can not marshal timestamp")
 	}
 	return m
 }
 func (n *Count) SetKey(k []byte) {
-	err := n.timestamp.UnmarshalBinary(k)
+	err := n.Timestamp.UnmarshalBinary(k)
 	if err != nil {
 		panic("can not marshal timestamp")
 	}
 }
 func (n *Count) GetTimestamp() time.Time {
-    return n.timestamp
+    return n.Timestamp
 }
 func (n *Count) SetTimestamp(timestamp time.Time) {
-    n.timestamp = timestamp
+    n.Timestamp = timestamp
 }
 func (n *Count) GetCount() int {
-    return n.count
+    return n.Count
 }
 func (n *Count) SetCount(count int) {
-    n.count = count
+    n.Count = count
 }
 func (n *Count) Bytes() ([]byte, error) {
 	c := []byte{
-		byte(n.count & 0xFF),
-		byte(n.count & 0xFF00 >> 8),
-		byte(n.count & 0xFF0000 >> 16),
-		byte(n.count & 0x7F000000 >> 24)}
+		byte(n.Count & 0xFF),
+		byte(n.Count & 0xFF00 >> 8),
+		byte(n.Count & 0xFF0000 >> 16),
+		byte(n.Count & 0x7F000000 >> 24)}
 	return c, nil
 }
 func (n *Count) DeserializeFrom(d []byte) error {
 	if len(d) != 4 {
 		return ErrInvalid
 	}
-	n.count = int(d[0]) + int(d[1])<<8 + int(d[2])<<16 + int(d[3])<<24
+	n.Count = int(d[0]) + int(d[1])<<8 + int(d[2])<<16 + int(d[3])<<24
 	return nil
 }
 
 type CountNodeClients struct {
 	Count
-	node alfred.HardwareAddr
+	Node alfred.HardwareAddr
 }
 func NewCountNodeClients(node alfred.HardwareAddr, timestamp time.Time, count int) *CountNodeClients {
-	n := &CountNodeClients{node: node, Count: Count{timestamp: timestamp, count: count}}
+	n := &CountNodeClients{Node: node, Count: Count{Timestamp: timestamp, Count: count}}
 	return n
 }
 func (c *CountNodeClients) StoreID() []byte {
-	return c.node
+	return c.Node
 }
 
 type CountMeshClients struct{ Count }
