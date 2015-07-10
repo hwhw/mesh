@@ -6,10 +6,10 @@ package alfred
 
 import (
 	"bytes"
+	"crypto/rand"
 	"errors"
 	"io"
 	"net"
-	"crypto/rand"
 )
 
 const (
@@ -58,15 +58,15 @@ type Packet interface {
 
 // wrapper for getting a random uint16 used for transaction IDs
 func getRandomId() (randval uint16) {
-    data := make([]byte, 2)
-    n, err := rand.Reader.Read(data)
-    if err != nil {
-        panic(err)
-    }
-    if n < 2 {
-        panic("got not enough random data!")
-    }
-    return uint16(data[0]) << 8 + uint16(data[1])
+	data := make([]byte, 2)
+	n, err := rand.Reader.Read(data)
+	if err != nil {
+		panic(err)
+	}
+	if n < 2 {
+		panic("got not enough random data!")
+	}
+	return uint16(data[0])<<8 + uint16(data[1])
 }
 
 // A type-length-version data element.
@@ -87,17 +87,17 @@ type TLV struct {
 // of bytes read from the io.Reader
 func ReadTLV(r io.Reader) (*TLV, error, int) {
 	tlv := TLV{}
-    data := make([]byte, 4)
-    n, err := r.Read(data)
-    if err != nil {
-        return &tlv, err, n
-    }
-    if n < 4 {
-        return &tlv, ErrRead, n
-    }
-    tlv.Type = data[0]
-    tlv.Version = data[1]
-    tlv.Length = uint16(data[2]) << 8 + uint16(data[3])
+	data := make([]byte, 4)
+	n, err := r.Read(data)
+	if err != nil {
+		return &tlv, err, n
+	}
+	if n < 4 {
+		return &tlv, ErrRead, n
+	}
+	tlv.Type = data[0]
+	tlv.Version = data[1]
+	tlv.Length = uint16(data[2])<<8 + uint16(data[3])
 	return &tlv, nil, n
 }
 
@@ -144,20 +144,20 @@ func ReadData(r io.Reader) (*Data, error, int) {
 
 // check for equality
 func (d *Data) Equals(other *Data) bool {
-    if d == nil {
-        return false
-    }
-    if other == nil {
-        return false
-    }
-    if bytes.Compare(d.Source, other.Source) == 0 &&
-        d.Header.Type == other.Header.Type &&
-        d.Header.Version == other.Header.Version &&
-        d.Header.Length == other.Header.Length &&
-        bytes.Compare(d.Data, other.Data) == 0 {
-        return true
-    }
-    return false
+	if d == nil {
+		return false
+	}
+	if other == nil {
+		return false
+	}
+	if bytes.Compare(d.Source, other.Source) == 0 &&
+		d.Header.Type == other.Header.Type &&
+		d.Header.Version == other.Header.Version &&
+		d.Header.Length == other.Header.Length &&
+		bytes.Compare(d.Data, other.Data) == 0 {
+		return true
+	}
+	return false
 }
 
 func (d *Data) Write(w io.Writer) error {
@@ -193,16 +193,16 @@ type TransactionMgmt struct {
 // of bytes read from the io.Reader
 func ReadTransactionMgmt(r io.Reader) (*TransactionMgmt, error, int) {
 	tx := TransactionMgmt{}
-    data := make([]byte, 4)
-    n, err := r.Read(data)
-    if err != nil {
-        return &tx, err, n
-    }
-    if n < 4 {
-        return &tx, ErrRead, n
-    }
-    tx.Id = uint16(data[0]) << 8 + uint16(data[1])
-    tx.SeqNo = uint16(data[2]) << 8 + uint16(data[3])
+	data := make([]byte, 4)
+	n, err := r.Read(data)
+	if err != nil {
+		return &tx, err, n
+	}
+	if n < 4 {
+		return &tx, ErrRead, n
+	}
+	tx.Id = uint16(data[0])<<8 + uint16(data[1])
+	tx.SeqNo = uint16(data[2])<<8 + uint16(data[3])
 	return &tx, nil, n
 }
 
@@ -345,16 +345,16 @@ func NewRequestV0(requestedtype uint8, txid uint16) *RequestV0 {
 // of bytes read from the io.Reader
 func ReadRequestV0(r io.Reader, header *TLV) (*RequestV0, error, int) {
 	rq := RequestV0{Header: header}
-    data := make([]byte, 3)
-    n, err := r.Read(data)
-    if err != nil {
+	data := make([]byte, 3)
+	n, err := r.Read(data)
+	if err != nil {
 		return &rq, err, n
 	}
-    if n < 3 {
-        return &rq, ErrRead, n
-    }
-    rq.RequestedType = data[0]
-    rq.TxId = uint16(data[1]) << 8 + uint16(data[2])
+	if n < 3 {
+		return &rq, ErrRead, n
+	}
+	rq.RequestedType = data[0]
+	rq.TxId = uint16(data[1])<<8 + uint16(data[2])
 	return &rq, nil, 3
 }
 
@@ -396,12 +396,12 @@ func NewModeSwitchV0(mode uint8) *ModeSwitchV0 {
 // of bytes read from the io.Reader
 func ReadModeSwitchV0(r io.Reader, header *TLV) (*ModeSwitchV0, error, int) {
 	m := ModeSwitchV0{Header: header}
-    data := make([]byte, 1)
-    n, err := r.Read(data)
-    if err != nil {
+	data := make([]byte, 1)
+	n, err := r.Read(data)
+	if err != nil {
 		return &m, err, n
 	}
-    m.Mode = data[0]
+	m.Mode = data[0]
 	return &m, nil, n
 }
 
@@ -531,17 +531,17 @@ func Read(r io.Reader) (Packet, error, int) {
 // Wrapper for the MAC addresses found as main identifier.
 type HardwareAddr net.HardwareAddr
 
-var NullHardwareAddr = HardwareAddr([]byte{0,0,0,0,0,0})
+var NullHardwareAddr = HardwareAddr([]byte{0, 0, 0, 0, 0, 0})
 
 // check if it is unset - i.e. nil pointer or 00:00:00:00:00:00
 func (i *HardwareAddr) IsUnset() bool {
-    if i == nil {
-        return true
-    }
-    if bytes.Compare(NullHardwareAddr, *i) == 0 {
-        return true
-    }
-    return false
+	if i == nil {
+		return true
+	}
+	if bytes.Compare(NullHardwareAddr, *i) == 0 {
+		return true
+	}
+	return false
 }
 
 // wrap printing from net.HardwareAddr
@@ -551,7 +551,7 @@ func (i HardwareAddr) String() string {
 
 // parse address from a string
 func (i *HardwareAddr) Parse(addr string) error {
-    return i.UnmarshalJSON([]byte(addr))
+	return i.UnmarshalJSON([]byte(addr))
 }
 
 // JSON encoder for MAC addresses

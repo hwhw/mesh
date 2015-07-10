@@ -120,16 +120,16 @@ func (g *Gateway) StoreID() []byte {
 }
 
 type Counter interface {
-    store.Item
-    GetTimestamp() time.Time
-    SetTimestamp(time.Time)
-    GetCount() int
-    SetCount(int)
+	store.Item
+	GetTimestamp() time.Time
+	SetTimestamp(time.Time)
+	GetCount() int
+	SetCount(int)
 }
 
 type Count struct {
 	Timestamp time.Time
-	Count   int
+	Count     int
 }
 
 func (n *Count) Key() []byte {
@@ -146,16 +146,16 @@ func (n *Count) SetKey(k []byte) {
 	}
 }
 func (n *Count) GetTimestamp() time.Time {
-    return n.Timestamp
+	return n.Timestamp
 }
 func (n *Count) SetTimestamp(timestamp time.Time) {
-    n.Timestamp = timestamp
+	n.Timestamp = timestamp
 }
 func (n *Count) GetCount() int {
-    return n.Count
+	return n.Count
 }
 func (n *Count) SetCount(count int) {
-    n.Count = count
+	n.Count = count
 }
 func (n *Count) Bytes() ([]byte, error) {
 	c := []byte{
@@ -177,6 +177,7 @@ type CountNodeClients struct {
 	Count
 	Node alfred.HardwareAddr
 }
+
 func NewCountNodeClients(node alfred.HardwareAddr, timestamp time.Time, count int) *CountNodeClients {
 	n := &CountNodeClients{Node: node, Count: Count{Timestamp: timestamp, Count: count}}
 	return n
@@ -186,13 +187,17 @@ func (c *CountNodeClients) StoreID() []byte {
 }
 
 type CountMeshClients struct{ Count }
+
 var countmeshclientsStoreID = []byte("MeshClients")
+
 func (c *CountMeshClients) StoreID() []byte {
 	return countmeshclientsStoreID
 }
 
 type CountMeshNodes struct{ Count }
+
 var countmeshnodesStoreID = []byte("MeshNodes")
+
 func (c *CountMeshNodes) StoreID() []byte {
 	return countmeshnodesStoreID
 }

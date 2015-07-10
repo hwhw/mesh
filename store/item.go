@@ -31,8 +31,8 @@ type Meta struct {
 	content []byte
 	// typed/parsed content (will get unserialized lazily)
 	item *Item
-    // key cache
-    key []byte
+	// key cache
+	key []byte
 }
 
 // these are needed for binary size calculation for Meta
@@ -45,7 +45,7 @@ var Never = time.Time{}
 
 // Create a new Meta element
 func NewMeta(item Item) *Meta {
-    return &Meta{item: &item, content: nil, key: nil}
+	return &Meta{item: &item, content: nil, key: nil}
 }
 
 // Set invalidation date via duration
@@ -68,22 +68,22 @@ func (m *Meta) GetItem(item Item) error {
 
 // pass through a call to the Key method
 func (m *Meta) Key() []byte {
-    if m.item != nil {
-	    return (*m.item).Key()
-    } else if m.key != nil {
-        return m.key
-    } else {
-        return nil
-    }
+	if m.item != nil {
+		return (*m.item).Key()
+	} else if m.key != nil {
+		return m.key
+	} else {
+		return nil
+	}
 }
 
 // pass through a call to the SetKey method
 func (m *Meta) SetKey(key []byte) {
-    if m.item != nil {
-        (*m.item).SetKey(key)
-    } else {
-        m.key = key
-    }
+	if m.item != nil {
+		(*m.item).SetKey(key)
+	} else {
+		m.key = key
+	}
 }
 
 // fast Meta binary encoder
@@ -120,7 +120,7 @@ func (m *Meta) Bytes() ([]byte, error) {
 
 // fast Meta binary decoder
 func (m *Meta) DeserializeFrom(d []byte) error {
-    m.key = nil
+	m.key = nil
 	err := m.Created.UnmarshalBinary(d[:timeSize])
 	if err == nil {
 		err = m.Updated.UnmarshalBinary(d[timeSize : 2*timeSize])

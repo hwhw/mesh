@@ -14,15 +14,15 @@ func (db *NodeDB) updateNodeInfo(i *NodeInfo, persistent bool) func() error {
 			}
 			return db.Main.UpdateMeta(tx, store.NewMeta(&NodeInfo{}), m)
 		})
-        db.cacheExportNodeInfo.invalidate()
-        db.cacheExportNodes.invalidate()
-        db.cacheExportNodesOld.invalidate()
+		db.cacheExportNodeInfo.invalidate()
+		db.cacheExportNodes.invalidate()
+		db.cacheExportNodesOld.invalidate()
 		return nil
 	}
 }
 
 func (db *NodeDB) UpdateNodeInfo(i *NodeInfo, persistent bool) error {
-    return db.updateNodeInfo(i, persistent)()
+	return db.updateNodeInfo(i, persistent)()
 }
 
 func (db *NodeDB) updateStatistics(s *Statistics) func() error {
@@ -34,7 +34,7 @@ func (db *NodeDB) updateStatistics(s *Statistics) func() error {
 			if err == nil && s.Statistics.Data.Gateway != nil {
 				// put entry in Gateway table
 				g := &Gateway{}
-                mac := db.resolveAlias(tx, *s.Statistics.Data.Gateway)
+				mac := db.resolveAlias(tx, *s.Statistics.Data.Gateway)
 				g.SetKey(mac)
 				m := store.NewMeta(g)
 				m.InvalidateIn(db.validTimeVisData)
@@ -42,15 +42,15 @@ func (db *NodeDB) updateStatistics(s *Statistics) func() error {
 			}
 			return err
 		})
-        db.cacheExportStatistics.invalidate()
-        //db.cacheExportNodes.invalidate()
-        //db.cacheExportNodesOld.invalidate()
+		db.cacheExportStatistics.invalidate()
+		//db.cacheExportNodes.invalidate()
+		//db.cacheExportNodesOld.invalidate()
 		return nil
 	}
 }
 
 func (db *NodeDB) UpdateStatistics(s *Statistics) error {
-    return db.updateStatistics(s)()
+	return db.updateStatistics(s)()
 }
 
 func (db *NodeDB) updateVisData(v *VisData) func() error {
@@ -79,13 +79,13 @@ func (db *NodeDB) updateVisData(v *VisData) func() error {
 			}
 			return err
 		})
-        db.cacheExportVisData.invalidate()
-        db.cacheExportAliases.invalidate()
-        db.cacheExportGraph.invalidate()
+		db.cacheExportVisData.invalidate()
+		db.cacheExportAliases.invalidate()
+		db.cacheExportGraph.invalidate()
 		return nil
 	}
 }
 
 func (db *NodeDB) UpdateVisData(v *VisData) error {
-    return db.updateVisData(v)()
+	return db.updateVisData(v)()
 }

@@ -21,13 +21,13 @@ type NodeDB struct {
 	NotifyQuitLogger       *topic.Topic
 	validTimeGluon         time.Duration
 	validTimeVisData       time.Duration
-    cacheExportNodeInfo    Cache
-    cacheExportStatistics  Cache
-    cacheExportVisData     Cache
-    cacheExportAliases     Cache
-    cacheExportNodes       Cache
-    cacheExportGraph       Cache
-    cacheExportNodesOld    Cache
+	cacheExportNodeInfo    Cache
+	cacheExportStatistics  Cache
+	cacheExportVisData     Cache
+	cacheExportAliases     Cache
+	cacheExportNodes       Cache
+	cacheExportGraph       Cache
+	cacheExportNodesOld    Cache
 }
 
 var DefaultValidityGluon = time.Hour * 24 * 30
@@ -79,11 +79,11 @@ func (db *NodeDB) StopPurger() {
 }
 
 func (db *NodeDB) StartLogger(offlineAfter time.Duration) {
-    go db.LogCounts(offlineAfter)
+	go db.LogCounts(offlineAfter)
 }
 
 func (db *NodeDB) StopLogger() {
-    db.NotifyQuitLogger.Broadcast <- struct{}{}
+	db.NotifyQuitLogger.Broadcast <- struct{}{}
 }
 
 func (db *NodeDB) StartUpdater(client *alfred.Client, updatewait, retrywait time.Duration) {

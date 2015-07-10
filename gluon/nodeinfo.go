@@ -78,7 +78,7 @@ type Owner struct {
 // read structured information from A.L.F.R.E.D. packet
 func (ni *NodeInfo) ReadAlfred(data alfred.Data) error {
 	ni.Source = alfred.HardwareAddr(data.Source)
-    ni.Data = &NodeInfoData{}
+	ni.Data = &NodeInfoData{}
 	return readJSON(data, NODEINFO_PACKETTYPE, NODEINFO_PACKETVERSION, ni.Data)
 }
 

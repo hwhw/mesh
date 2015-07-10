@@ -1,17 +1,17 @@
 package nodedb
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"github.com/boltdb/bolt"
-	"github.com/hwhw/mesh/gluon"
 	"github.com/hwhw/mesh/alfred"
+	"github.com/hwhw/mesh/gluon"
 	"github.com/hwhw/mesh/store"
 	"io"
-	"os"
 	"log"
+	"os"
 	"time"
-    "bytes"
 )
 
 var ErrUnknownVersion = errors.New("Unknown data format version")
@@ -27,9 +27,9 @@ const (
 
 // Base type for the nodes.json document
 type NodesJSON struct {
-	Timestamp NodesJSONTime            `json:"timestamp"`
+	Timestamp NodesJSONTime             `json:"timestamp"`
 	Nodes     map[string]*NodesJSONData `json:"nodes"`
-	Version   int                      `json:"version,omitempty"`
+	Version   int                       `json:"version,omitempty"`
 }
 
 // Type for the data of a single Mesh node
@@ -48,12 +48,12 @@ type NodesJSONFlags struct {
 }
 
 type NodesJSONStatistics struct {
-	Clients     int                 `json:"clients"`
+	Clients     int                  `json:"clients"`
 	Gateway     *alfred.HardwareAddr `json:"gateway,omitempty"`
-	Uptime      float64             `json:"uptime"`
-	LoadAvg     float64             `json:"loadavg"`
-	MemoryUsage float64             `json:"memory_usage"`
-	RootFSUsage float64             `json:"rootfs_usage"`
+	Uptime      float64              `json:"uptime"`
+	LoadAvg     float64              `json:"loadavg"`
+	MemoryUsage float64              `json:"memory_usage"`
+	RootFSUsage float64              `json:"rootfs_usage"`
 }
 
 // provide interface for JSON serialization
@@ -77,7 +77,7 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 	data := &NodesJSONData{}
 
 	nodeinfo := &NodeInfo{}
-    if err := nmeta.GetItem(nodeinfo); err != nil {
+	if err := nmeta.GetItem(nodeinfo); err != nil {
 		return data, err
 	}
 
@@ -88,8 +88,8 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 	firstseen := nmeta.Created
 	lastseen := nmeta.Updated
 
-    statistics := &Statistics{}
-    smeta := store.NewMeta(statistics)
+	statistics := &Statistics{}
+	smeta := store.NewMeta(statistics)
 	if db.Main.Get(tx, nmeta.Key(), smeta) == nil {
 		if smeta.Created.Before(firstseen) {
 			firstseen = smeta.Created
@@ -98,7 +98,7 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 			lastseen = smeta.Updated
 		}
 
-        if smeta.GetItem(statistics) == nil {
+		if smeta.GetItem(statistics) == nil {
 			statdata := statistics.Data
 			if statdata.Memory != nil {
 				if statdata.Memory.Total != 0 {
@@ -112,17 +112,17 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 			if statdata.Clients != nil {
 				data.Statistics.Clients = statdata.Clients.Total
 			}
-            if statdata.Gateway != nil {
-                g := db.resolveAlias(tx, *statdata.Gateway)
-                data.Statistics.Gateway = &g
-            }
+			if statdata.Gateway != nil {
+				g := db.resolveAlias(tx, *statdata.Gateway)
+				data.Statistics.Gateway = &g
+			}
 			data.Statistics.LoadAvg = statdata.LoadAvg
 			data.Statistics.RootFSUsage = statdata.RootFSUsage
 		}
 	}
 
-    vis := &VisData{}
-    vmeta := store.NewMeta(vis)
+	vis := &VisData{}
+	vmeta := store.NewMeta(vis)
 	if db.Main.Get(tx, nmeta.Key(), vmeta) == nil {
 		if vmeta.Created.Before(firstseen) {
 			firstseen = vmeta.Created
@@ -137,7 +137,7 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 
 	// set gateway flag when we have the node's address in
 	// our list of gateways
-    mac := db.resolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
+	mac := db.resolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
 	data.Flags.Gateway = db.Main.Exists(tx, mac, &Gateway{})
 
 	// online state is determined by the time we have last
@@ -155,32 +155,32 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 // Write a full nodes.json style document based on the current
 // database contents.
 func (db *NodeDB) GenerateNodesJSON(w io.Writer, offlineDuration time.Duration) {
-    data := db.cacheExportNodes.get(func() []byte {
-        nodejs := NodesJSON{
-            Nodes:     make(map[string]*NodesJSONData),
-            Timestamp: NodesJSONTime(time.Now()),
-            Version:   1,
-        }
-        db.Main.View(func(tx *bolt.Tx) error {
-            nodeinfo := &NodeInfo{}
-            nmeta := store.NewMeta(nodeinfo)
-            return db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
-                data, err := db.getNodesJSONData(tx, nmeta, offlineDuration)
-                if err == nil {
-                    nodejs.Nodes[alfred.HardwareAddr(nmeta.Key()).String()] = data
-                } else {
-                    log.Printf("NodeDB: can not generate node info JSON for %v: %v", alfred.HardwareAddr(nmeta.Key()), err)
-                }
-                return false, nil
-            })
-        })
-        buf := new(bytes.Buffer)
-        enc := json.NewEncoder(buf)
-        if err := enc.Encode(&nodejs); err != nil {
-            return []byte{}
-        }
-        return buf.Bytes()
-    })
+	data := db.cacheExportNodes.get(func() []byte {
+		nodejs := NodesJSON{
+			Nodes:     make(map[string]*NodesJSONData),
+			Timestamp: NodesJSONTime(time.Now()),
+			Version:   1,
+		}
+		db.Main.View(func(tx *bolt.Tx) error {
+			nodeinfo := &NodeInfo{}
+			nmeta := store.NewMeta(nodeinfo)
+			return db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
+				data, err := db.getNodesJSONData(tx, nmeta, offlineDuration)
+				if err == nil {
+					nodejs.Nodes[alfred.HardwareAddr(nmeta.Key()).String()] = data
+				} else {
+					log.Printf("NodeDB: can not generate node info JSON for %v: %v", alfred.HardwareAddr(nmeta.Key()), err)
+				}
+				return false, nil
+			})
+		})
+		buf := new(bytes.Buffer)
+		enc := json.NewEncoder(buf)
+		if err := enc.Encode(&nodejs); err != nil {
+			return []byte{}
+		}
+		return buf.Bytes()
+	})
 	w.Write(data)
 }
 
@@ -203,21 +203,21 @@ func (db *NodeDB) ImportNodes(r io.Reader, persistent bool) error {
 	if nodes.Version != 1 {
 		return ErrUnknownVersion
 	}
-    for _, node := range nodes.Nodes {
-        n := &NodeInfo{NodeInfo: gluon.NodeInfo{Source: node.NodeInfo.NodeID, Data:&node.NodeInfo}}
-        m := store.NewMeta(n)
-        m.Updated = time.Time(node.LastSeen).Local()
-        m.Created = time.Time(node.FirstSeen).Local()
-        if !persistent {
-            m.InvalidateIn(db.validTimeGluon)
-        }
-        err := db.Main.Batch(func(tx *bolt.Tx) error {
+	for _, node := range nodes.Nodes {
+		n := &NodeInfo{NodeInfo: gluon.NodeInfo{Source: node.NodeInfo.NodeID, Data: &node.NodeInfo}}
+		m := store.NewMeta(n)
+		m.Updated = time.Time(node.LastSeen).Local()
+		m.Created = time.Time(node.FirstSeen).Local()
+		if !persistent {
+			m.InvalidateIn(db.validTimeGluon)
+		}
+		err := db.Main.Batch(func(tx *bolt.Tx) error {
 			return db.Main.UpdateMeta(tx, store.NewMeta(&NodeInfo{}), m)
 		})
-        if err != nil {
-            log.Printf("Import: error on node %v", node.NodeInfo.NodeID)
-        }
-    }
+		if err != nil {
+			log.Printf("Import: error on node %v", node.NodeInfo.NodeID)
+		}
+	}
 	return err
 }
 

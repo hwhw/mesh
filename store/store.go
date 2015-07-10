@@ -76,7 +76,7 @@ func (b *DB) Exists(tx *bolt.Tx, key []byte, item Item) bool {
 	if bucket.Get(key) != nil {
 		return true
 	}
-    return false
+	return false
 }
 
 // get an item, identified by key.
@@ -91,9 +91,9 @@ func (b *DB) Get(tx *bolt.Tx, key []byte, item Item) error {
 		return ErrNotFound
 	}
 	err := item.DeserializeFrom(v)
-    if err == nil {
-        item.SetKey(key)
-    }
+	if err == nil {
+		item.SetKey(key)
+	}
 	return err
 }
 
@@ -130,23 +130,23 @@ func (b *DB) UpdateMeta(tx *bolt.Tx, olditem *Meta, newitem *Meta) error {
 // When the callback handler returns true, that will trigger a reset of the
 // loop, starting anew. Do this after a delete.
 func (b *DB) ForEach(tx *bolt.Tx, item Item, handler func(cursor *bolt.Cursor) (bool, error)) error {
-    return b.iterate(tx, item, handler,
-        func(c *bolt.Cursor) ([]byte, []byte) { return c.First() },
-        func(c *bolt.Cursor) ([]byte, []byte) { return c.Next() })
+	return b.iterate(tx, item, handler,
+		func(c *bolt.Cursor) ([]byte, []byte) { return c.First() },
+		func(c *bolt.Cursor) ([]byte, []byte) { return c.Next() })
 }
 
 // like ForEach, but running from last item to first one
 func (b *DB) ForEachReverse(tx *bolt.Tx, item Item, handler func(cursor *bolt.Cursor) (bool, error)) error {
-    return b.iterate(tx, item, handler,
-        func(c *bolt.Cursor) ([]byte, []byte) { return c.Last() },
-        func(c *bolt.Cursor) ([]byte, []byte) { return c.Prev() })
+	return b.iterate(tx, item, handler,
+		func(c *bolt.Cursor) ([]byte, []byte) { return c.Last() },
+		func(c *bolt.Cursor) ([]byte, []byte) { return c.Prev() })
 }
 
 // actual implementation of iteration through items in bucket
 func (b *DB) iterate(tx *bolt.Tx, item Item,
-    handler func(cursor *bolt.Cursor) (bool, error),
-    start func(cursor *bolt.Cursor) ([]byte, []byte),
-    cont func(cursor *bolt.Cursor) ([]byte, []byte)) error {
+	handler func(cursor *bolt.Cursor) (bool, error),
+	start func(cursor *bolt.Cursor) ([]byte, []byte),
+	cont func(cursor *bolt.Cursor) ([]byte, []byte)) error {
 
 	bucket := tx.Bucket(item.StoreID())
 	if bucket == nil {
@@ -161,7 +161,7 @@ restart:
 			// skip over invalid data
 			continue
 		}
-        item.SetKey(k)
+		item.SetKey(k)
 		restart, err := handler(c)
 		if err != nil {
 			return err

@@ -2,21 +2,21 @@ package webservice
 
 import (
 	"compress/gzip"
-	"github.com/hwhw/mesh/nodedb"
+	"github.com/gorilla/mux"
 	"github.com/hwhw/mesh/alfred"
-    "net/http"
-    "time"
-    "io"
-    "log"
-    "strings"
-    "strconv"
-    "runtime/debug"
-    "github.com/gorilla/mux"
+	"github.com/hwhw/mesh/nodedb"
+	"io"
+	"log"
+	"net/http"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Webservice struct {
-    db *nodedb.NodeDB
-    nodeOfflineDuration time.Duration
+	db                  *nodedb.NodeDB
+	nodeOfflineDuration time.Duration
 }
 
 func (ws *Webservice) handler_nodes_json(w http.ResponseWriter, r *http.Request) {
@@ -56,60 +56,60 @@ func (ws *Webservice) handler_export_aliases_json(w http.ResponseWriter, r *http
 
 func (ws *Webservice) handler_loglist_json(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
-    ws.db.GenerateLogList(w)
+	ws.db.GenerateLogList(w)
 }
 
 func (ws *Webservice) handler_logdata_json(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    var counter nodedb.Counter
-    switch vars["id"] {
-    case "clients":
-        counter = &nodedb.CountMeshClients{}
-    case "nodes":
-        counter = &nodedb.CountMeshNodes{}
-    default:
-        addr := &alfred.HardwareAddr{}
-        err := addr.Parse(vars["id"])
-        if err != nil {
-            http.Error(w, "Bad Request", 400)
-            return
-        }
-        counter = &nodedb.CountNodeClients{Node: *addr}
-    }
+	vars := mux.Vars(r)
+	var counter nodedb.Counter
+	switch vars["id"] {
+	case "clients":
+		counter = &nodedb.CountMeshClients{}
+	case "nodes":
+		counter = &nodedb.CountMeshNodes{}
+	default:
+		addr := &alfred.HardwareAddr{}
+		err := addr.Parse(vars["id"])
+		if err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		counter = &nodedb.CountNodeClients{Node: *addr}
+	}
 	w.Header().Set("Content-type", "application/json")
-    ws.db.GenerateLogJSON(w, counter)
+	ws.db.GenerateLogJSON(w, counter)
 }
 
 func (ws *Webservice) handler_logsamples_json(w http.ResponseWriter, r *http.Request) {
-    vars := mux.Vars(r)
-    start := time.Now()
-    over, err := time.ParseDuration(vars["duration"])
-    if err != nil {
-        http.Error(w, "Bad Request", 400)
-        return
-    }
-    samples, err := strconv.Atoi(vars["samples"])
-    if err != nil {
-        http.Error(w, "Bad Request", 400)
-        return
-    }
-    var counter nodedb.Counter
-    switch vars["id"] {
-    case "clients":
-        counter = &nodedb.CountMeshClients{}
-    case "nodes":
-        counter = &nodedb.CountMeshNodes{}
-    default:
-        addr := &alfred.HardwareAddr{}
-        err := addr.Parse(vars["id"])
-        if err != nil {
-            http.Error(w, "Bad Request", 400)
-            return
-        }
-        counter = &nodedb.CountNodeClients{Node: *addr}
-    }
+	vars := mux.Vars(r)
+	start := time.Now()
+	over, err := time.ParseDuration(vars["duration"])
+	if err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	samples, err := strconv.Atoi(vars["samples"])
+	if err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	var counter nodedb.Counter
+	switch vars["id"] {
+	case "clients":
+		counter = &nodedb.CountMeshClients{}
+	case "nodes":
+		counter = &nodedb.CountMeshNodes{}
+	default:
+		addr := &alfred.HardwareAddr{}
+		err := addr.Parse(vars["id"])
+		if err != nil {
+			http.Error(w, "Bad Request", 400)
+			return
+		}
+		counter = &nodedb.CountNodeClients{Node: *addr}
+	}
 	w.Header().Set("Content-type", "application/json")
-    ws.db.GenerateLogitemSamplesJSON(w, counter, start, over, samples)
+	ws.db.GenerateLogitemSamplesJSON(w, counter, start, over, samples)
 }
 
 func HTTPError(handler http.Handler) http.Handler {
@@ -129,7 +129,7 @@ func HTTPLog(handler http.Handler) http.Handler {
 		start := time.Now()
 		handler.ServeHTTP(w, r)
 		end := time.Now()
-        log.Printf("HTTP: %s %s %s (%s)", r.RemoteAddr, r.Method, r.URL, end.Sub(start))
+		log.Printf("HTTP: %s %s %s (%s)", r.RemoteAddr, r.Method, r.URL, end.Sub(start))
 	})
 }
 
@@ -164,26 +164,26 @@ func HTTPGzip(handler http.Handler) http.Handler {
 }
 
 func Run(db *nodedb.NodeDB, addr string, staticDir string, nodeOfflineDuration time.Duration) {
-    ws := &Webservice{db:db, nodeOfflineDuration:nodeOfflineDuration}
+	ws := &Webservice{db: db, nodeOfflineDuration: nodeOfflineDuration}
 
-    r := mux.NewRouter().StrictSlash(false)
+	r := mux.NewRouter().StrictSlash(false)
 
-    r.HandleFunc("/json/export/nodeinfo.json", ws.handler_export_nodeinfo_json)
-    r.HandleFunc("/json/export/statistics.json", ws.handler_export_statistics_json)
-    r.HandleFunc("/json/export/visdata.json", ws.handler_export_visdata_json)
-    r.HandleFunc("/json/export/aliases.json", ws.handler_export_aliases_json)
-    r.HandleFunc("/json/log/data/{id}.json", ws.handler_logdata_json)
-    r.HandleFunc("/json/log/samples/{id}/{duration}/{samples}.json", ws.handler_logsamples_json)
-    r.HandleFunc("/json/log/nodes.json", ws.handler_loglist_json)
-    r.HandleFunc("/json/old/nodes.json", ws.handler_nodes_old_json)
-    r.HandleFunc("/json/nodes.json", ws.handler_nodes_json)
-    r.HandleFunc("/json/graph.json", ws.handler_graph_json)
+	r.HandleFunc("/json/export/nodeinfo.json", ws.handler_export_nodeinfo_json)
+	r.HandleFunc("/json/export/statistics.json", ws.handler_export_statistics_json)
+	r.HandleFunc("/json/export/visdata.json", ws.handler_export_visdata_json)
+	r.HandleFunc("/json/export/aliases.json", ws.handler_export_aliases_json)
+	r.HandleFunc("/json/log/data/{id}.json", ws.handler_logdata_json)
+	r.HandleFunc("/json/log/samples/{id}/{duration}/{samples}.json", ws.handler_logsamples_json)
+	r.HandleFunc("/json/log/nodes.json", ws.handler_loglist_json)
+	r.HandleFunc("/json/old/nodes.json", ws.handler_nodes_old_json)
+	r.HandleFunc("/json/nodes.json", ws.handler_nodes_json)
+	r.HandleFunc("/json/graph.json", ws.handler_graph_json)
 
-    r.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
+	r.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
 
-    http.Handle("/", r)
+	http.Handle("/", r)
 
-    log.Printf("HTTP: server listening on %s", addr)
+	log.Printf("HTTP: server listening on %s", addr)
 
-    http.ListenAndServe(addr, HTTPLog(HTTPError(HTTPGzip(http.DefaultServeMux))))
+	http.ListenAndServe(addr, HTTPLog(HTTPError(HTTPGzip(http.DefaultServeMux))))
 }

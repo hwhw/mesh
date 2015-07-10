@@ -63,7 +63,7 @@ type TrafficCounter struct {
 
 // read structured information from A.L.F.R.E.D. packet
 func (stat *Statistics) ReadAlfred(data alfred.Data) error {
-    stat.Data = &StatisticsData{}
+	stat.Data = &StatisticsData{}
 	stat.Source = alfred.HardwareAddr(data.Source)
 	return readJSON(data, STATISTICS_PACKETTYPE, STATISTICS_PACKETVERSION, &stat.Data)
 }
