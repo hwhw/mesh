@@ -83,14 +83,15 @@ func (c *Client) PushData(packettype uint8, data []byte) error {
     })
 }
 
-// Request data of a given type.
-func (c *Client) Request(contentitem Content, handler func() error) error {
-    return c.Connect(func(conn net.Conn, buf *bufio.Writer) (err error) {
-        req := NewRequestV0(contentitem.GetPacketType(), getRandomId())
-        if err = req.Write(buf); err != nil {
-            return err
+// Request data of a given type
+func (c *Client) Request(packettype uint8, handler func(Data) error) error {
+    return c.Connect(func(conn net.Conn, buf *bufio.Writer) error {
+        req := NewRequestV0(packettype, getRandomId())
+        err := req.Write(buf)
+        if err == nil {
+            err = buf.Flush()
         }
-        if err = buf.Flush(); err != nil {
+        if err != nil {
             return err
         }
         for {
@@ -99,12 +100,7 @@ func (c *Client) Request(contentitem Content, handler func() error) error {
             case nil:
                 if pd, ok := pkg.(*PushDataV0); ok {
                     for _, d := range pd.Data {
-                        err = contentitem.ReadAlfred(d)
-                        if err != nil {
-                            // just skip
-                            continue
-                        }
-                        err = handler()
+                        err = handler(d)
                         if err != nil {
                             return err
                         }
@@ -123,6 +119,18 @@ func (c *Client) Request(contentitem Content, handler func() error) error {
                 return err
             }
         }
+    })
+}
+
+// Request data and put it into structured data conforming to the Content interface
+func (c *Client) RequestContent(contentitem Content, handler func() error) error {
+    return c.Request(contentitem.GetPacketType(), func (data Data) error {
+        err := contentitem.ReadAlfred(data)
+        if err != nil {
+            // just skip
+            return nil
+        }
+        return handler()
     })
 }
 
@@ -145,7 +153,7 @@ func (c *Client) Updater(
 	for {
 		timeout := updatewait
 		log.Printf("UpdateClient: Updating data from alfred server for type %d", contentitem.GetPacketType())
-		err := c.Request(contentitem, handler)
+		err := c.RequestContent(contentitem, handler)
 		if err != nil {
 			log.Printf("UpdateClient: type %d, error fetching data: %v", contentitem.GetPacketType(), err)
 			timeout = retrywait
