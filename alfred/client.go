@@ -35,6 +35,7 @@ func NewClient(network string, address string, timeout *time.Duration) *Client {
     return &Client{network: network, address: address, timeout: t}
 }
 
+// wrapper for the network connection
 func (c *Client) Connect(handler func(net.Conn, *bufio.Writer) error) error {
 	conn, err := net.Dial(c.network, c.address)
 	if err != nil {
@@ -46,6 +47,29 @@ func (c *Client) Connect(handler func(net.Conn, *bufio.Writer) error) error {
     return handler(conn, buf)
 }
 
+// switch server mode
+func (c *Client) ModeSwitch(mode uint8) error {
+    return c.Connect(func(conn net.Conn, buf *bufio.Writer) error {
+        err := NewModeSwitchV0(mode).Write(buf)
+        if err == nil {
+            err = buf.Flush()
+        }
+        return err
+    })
+}
+
+// change interface(s) the server listens on for UDP connections
+func (c *Client) ChangeInterface(interfaces []byte) error {
+    return c.Connect(func(conn net.Conn, buf *bufio.Writer) error {
+        err := NewChangeInterfaceV0(interfaces).Write(buf)
+        if err == nil {
+            err = buf.Flush()
+        }
+        return err
+    })
+}
+
+// push data of a given type
 func (c *Client) PushData(packettype uint8, data []byte) error {
     return c.Connect(func(conn net.Conn, buf *bufio.Writer) error {
         tm := &TransactionMgmt{Id: getRandomId(), SeqNo: 0}
