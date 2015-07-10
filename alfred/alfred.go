@@ -531,14 +531,14 @@ func Read(r io.Reader) (Packet, error, int) {
 // Wrapper for the MAC addresses found as main identifier.
 type HardwareAddr net.HardwareAddr
 
-var unsetAddr = HardwareAddr([]byte{0,0,0,0,0,0})
+var NullHardwareAddr = HardwareAddr([]byte{0,0,0,0,0,0})
 
 // check if it is unset - i.e. nil pointer or 00:00:00:00:00:00
 func (i *HardwareAddr) IsUnset() bool {
     if i == nil {
         return true
     }
-    if bytes.Compare(unsetAddr, *i) == 0 {
+    if bytes.Compare(NullHardwareAddr, *i) == 0 {
         return true
     }
     return false
