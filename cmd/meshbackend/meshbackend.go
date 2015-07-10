@@ -105,7 +105,7 @@ func main() {
 	}
     */
 
-	client := alfred.NewClient(*clientNetworkPtr, *clientAddressPtr)
+	client := alfred.NewClient(*clientNetworkPtr, *clientAddressPtr, nil)
 	db.StartUpdater(client, *updateWaitPtr, *retryWaitPtr)
 	db.StartPurger(*gluonPurgeIntPtr, *batAdvVisPurgeIntPtr)
     db.StartLogger(*nodeOfflineDuration)
