@@ -19,9 +19,15 @@ type NodeDB struct {
 	NotifyQuitUpdater      *topic.Topic
 	NotifyQuitPurger       *topic.Topic
 	NotifyQuitLogger       *topic.Topic
-	NotifyQuitGenerateJSON *topic.Topic
 	validTimeGluon         time.Duration
 	validTimeVisData       time.Duration
+    cacheExportNodeInfo    Cache
+    cacheExportStatistics  Cache
+    cacheExportVisData     Cache
+    cacheExportAliases     Cache
+    cacheExportNodes       Cache
+    cacheExportGraph       Cache
+    cacheExportNodesOld    Cache
 }
 
 var DefaultValidityGluon = time.Hour * 24 * 30
@@ -48,7 +54,6 @@ func New(gluonvalid, visvalid time.Duration, storefile string, logfile string) (
 		NotifyQuitUpdater:      topic.New(),
 		NotifyQuitPurger:       topic.New(),
 		NotifyQuitLogger:       topic.New(),
-		NotifyQuitGenerateJSON: topic.New(),
 		validTimeGluon:         gluonvalid,
 		validTimeVisData:       visvalid,
 	}
@@ -92,12 +97,4 @@ func (db *NodeDB) StartUpdater(client *alfred.Client, updatewait, retrywait time
 
 func (db *NodeDB) StopUpdater() {
 	db.NotifyQuitUpdater.Broadcast <- struct{}{}
-}
-
-func (db *NodeDB) StartGenerateJSON(directory string, offlineDuration time.Duration) {
-    go db.GenerateJSON(directory, offlineDuration)
-}
-
-func (db *NodeDB) StopGenerateJSON() {
-	db.NotifyQuitGenerateJSON.Broadcast <- struct{}{}
 }

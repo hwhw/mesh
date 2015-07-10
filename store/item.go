@@ -45,7 +45,7 @@ var Never = time.Time{}
 
 // Create a new Meta element
 func NewMeta(item Item) *Meta {
-	return &Meta{item: &item}
+    return &Meta{item: &item, content: nil, key: nil}
 }
 
 // Set invalidation date via duration
@@ -183,17 +183,17 @@ func (c *ContainedKey) SetKey(key []byte) {}
 // Note that upon creating new items, you must call SetKey()
 // to set up the key value.
 type BasicKey struct {
-	key []byte
+	KeyData []byte
 }
 
 // return key
 func (b *BasicKey) Key() []byte {
-	return b.key
+	return b.KeyData
 }
 
 // set key
 func (b *BasicKey) SetKey(key []byte) {
-	b.key = key
+	b.KeyData = key
 }
 
 // You can use this to implement simple Flag items.
@@ -216,26 +216,26 @@ func (f *Flag) DeserializeFrom(d []byte) error {
 // methods StoreID and Key.
 type Byte struct {
 	BasicKey
-	data []byte
+	Data []byte
 }
 
 // return data content
 func (b *Byte) Bytes() ([]byte, error) {
-	return b.data, nil
+	return b.Data, nil
 }
 
 // passthrough deserialization
 func (b *Byte) DeserializeFrom(d []byte) error {
-	b.data = d
+	b.Data = d
 	return nil
 }
 
 // set contained data
 func (b *Byte) Set(d []byte) {
-	b.data = d
+	b.Data = d
 }
 
 // get contained data
 func (b *Byte) Get() []byte {
-	return b.data
+	return b.Data
 }

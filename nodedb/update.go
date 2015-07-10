@@ -14,6 +14,9 @@ func (db *NodeDB) updateNodeInfo(i *NodeInfo, persistent bool) func() error {
 			}
 			return db.Main.UpdateMeta(tx, store.NewMeta(&NodeInfo{}), m)
 		})
+        db.cacheExportNodeInfo.invalidate()
+        db.cacheExportNodes.invalidate()
+        db.cacheExportNodesOld.invalidate()
 		return nil
 	}
 }
@@ -31,13 +34,17 @@ func (db *NodeDB) updateStatistics(s *Statistics) func() error {
 			if err == nil && s.Statistics.Data.Gateway != nil {
 				// put entry in Gateway table
 				g := &Gateway{}
-				g.SetKey(*s.Statistics.Data.Gateway)
+                mac := db.resolveAlias(tx, *s.Statistics.Data.Gateway)
+				g.SetKey(mac)
 				m := store.NewMeta(g)
 				m.InvalidateIn(db.validTimeVisData)
 				err = db.Main.Put(tx, m)
 			}
 			return err
 		})
+        db.cacheExportStatistics.invalidate()
+        //db.cacheExportNodes.invalidate()
+        //db.cacheExportNodesOld.invalidate()
 		return nil
 	}
 }
@@ -72,6 +79,9 @@ func (db *NodeDB) updateVisData(v *VisData) func() error {
 			}
 			return err
 		})
+        db.cacheExportVisData.invalidate()
+        db.cacheExportAliases.invalidate()
+        db.cacheExportGraph.invalidate()
 		return nil
 	}
 }

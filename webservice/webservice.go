@@ -19,18 +19,19 @@ type Webservice struct {
     nodeOfflineDuration time.Duration
 }
 
-func (ws *Webservice) handler_dyn_nodes_json(w http.ResponseWriter, r *http.Request) {
+func (ws *Webservice) handler_nodes_json(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
-	if err := ws.db.GenerateNodesJSON(w, ws.nodeOfflineDuration); err != nil {
-		panic(err)
-	}
+	ws.db.GenerateNodesJSON(w, ws.nodeOfflineDuration)
 }
 
-func (ws *Webservice) handler_dyn_graph_json(w http.ResponseWriter, r *http.Request) {
+func (ws *Webservice) handler_graph_json(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
-	if err := ws.db.GenerateGraphJSON(w); err != nil {
-		panic(err)
-	}
+	ws.db.GenerateGraphJSON(w)
+}
+
+func (ws *Webservice) handler_nodes_old_json(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-type", "application/json")
+	ws.db.GenerateNodesOldJSON(w, ws.nodeOfflineDuration)
 }
 
 func (ws *Webservice) handler_export_nodeinfo_json(w http.ResponseWriter, r *http.Request) {
@@ -46,6 +47,11 @@ func (ws *Webservice) handler_export_statistics_json(w http.ResponseWriter, r *h
 func (ws *Webservice) handler_export_visdata_json(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	ws.db.ExportVisData(w)
+}
+
+func (ws *Webservice) handler_export_aliases_json(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-type", "application/json")
+	ws.db.ExportAliases(w)
 }
 
 func (ws *Webservice) handler_loglist_json(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +163,7 @@ func HTTPGzip(handler http.Handler) http.Handler {
 	})
 }
 
-func Run(db *nodedb.NodeDB, addr string, staticDir string, jsonDir string, nodeOfflineDuration time.Duration) {
+func Run(db *nodedb.NodeDB, addr string, staticDir string, nodeOfflineDuration time.Duration) {
     ws := &Webservice{db:db, nodeOfflineDuration:nodeOfflineDuration}
 
     r := mux.NewRouter().StrictSlash(false)
@@ -165,20 +171,15 @@ func Run(db *nodedb.NodeDB, addr string, staticDir string, jsonDir string, nodeO
     r.HandleFunc("/json/export/nodeinfo.json", ws.handler_export_nodeinfo_json)
     r.HandleFunc("/json/export/statistics.json", ws.handler_export_statistics_json)
     r.HandleFunc("/json/export/visdata.json", ws.handler_export_visdata_json)
-
+    r.HandleFunc("/json/export/aliases.json", ws.handler_export_aliases_json)
     r.HandleFunc("/json/log/data/{id}.json", ws.handler_logdata_json)
     r.HandleFunc("/json/log/samples/{id}/{duration}/{samples}.json", ws.handler_logsamples_json)
     r.HandleFunc("/json/log/nodes.json", ws.handler_loglist_json)
+    r.HandleFunc("/json/old/nodes.json", ws.handler_nodes_old_json)
+    r.HandleFunc("/json/nodes.json", ws.handler_nodes_json)
+    r.HandleFunc("/json/graph.json", ws.handler_graph_json)
 
-    if jsonDir != "" {
-        r.Handle("/json/", http.StripPrefix("/json/", http.FileServer(http.Dir(jsonDir))))
-    } else {
-        // generate JSON data on the fly
-        r.HandleFunc("/json/nodes.json", ws.handler_dyn_nodes_json)
-        r.HandleFunc("/json/graph.json", ws.handler_dyn_graph_json)
-    }
-
-    r.Handle("/", http.FileServer(http.Dir(staticDir)))
+    r.PathPrefix("/").Handler(http.FileServer(http.Dir(staticDir)))
 
     http.Handle("/", r)
 
