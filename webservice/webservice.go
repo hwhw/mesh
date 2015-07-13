@@ -2,6 +2,7 @@ package webservice
 
 import (
 	"compress/gzip"
+	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
 	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/nodedb"
@@ -74,7 +75,12 @@ func (ws *Webservice) handler_logdata_json(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "Bad Request", 400)
 			return
 		}
-		counter = &nodedb.CountNodeClients{Node: *addr}
+		realaddr := alfred.HardwareAddr{}
+		ws.db.Main.View(func(tx *bolt.Tx) error {
+			realaddr = ws.db.ResolveAlias(tx, *addr)
+			return nil
+		})
+		counter = &nodedb.CountNodeClients{Node: realaddr}
 	}
 	w.Header().Set("Content-type", "application/json")
 	ws.db.GenerateLogJSON(w, counter)
@@ -82,7 +88,6 @@ func (ws *Webservice) handler_logdata_json(w http.ResponseWriter, r *http.Reques
 
 func (ws *Webservice) handler_logsamples_json(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	start := time.Now()
 	over, err := time.ParseDuration(vars["duration"])
 	if err != nil {
 		http.Error(w, "Bad Request", 400)
@@ -93,6 +98,7 @@ func (ws *Webservice) handler_logsamples_json(w http.ResponseWriter, r *http.Req
 		http.Error(w, "Bad Request", 400)
 		return
 	}
+	start := time.Now().Round(time.Duration(int64(over) / int64(samples)))
 	var counter nodedb.Counter
 	switch vars["id"] {
 	case "clients":
@@ -109,6 +115,7 @@ func (ws *Webservice) handler_logsamples_json(w http.ResponseWriter, r *http.Req
 		counter = &nodedb.CountNodeClients{Node: *addr}
 	}
 	w.Header().Set("Content-type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
 	ws.db.GenerateLogitemSamplesJSON(w, counter, start, over, samples)
 }
 
@@ -172,8 +179,8 @@ func Run(db *nodedb.NodeDB, addr string, staticDir string, nodeOfflineDuration t
 	r.HandleFunc("/json/export/statistics.json", ws.handler_export_statistics_json)
 	r.HandleFunc("/json/export/visdata.json", ws.handler_export_visdata_json)
 	r.HandleFunc("/json/export/aliases.json", ws.handler_export_aliases_json)
-	r.HandleFunc("/json/log/data/{id}.json", ws.handler_logdata_json)
-	r.HandleFunc("/json/log/samples/{id}/{duration}/{samples}.json", ws.handler_logsamples_json)
+	r.HandleFunc("/json/log/data-{id}.json", ws.handler_logdata_json)
+	r.HandleFunc("/json/log/samples-{id}-{duration}-{samples}.json", ws.handler_logsamples_json)
 	r.HandleFunc("/json/log/nodes.json", ws.handler_loglist_json)
 	r.HandleFunc("/json/old/nodes.json", ws.handler_nodes_old_json)
 	r.HandleFunc("/json/nodes.json", ws.handler_nodes_json)

@@ -103,24 +103,25 @@ func (db *NodeDB) count(offlineAfter time.Duration, done chan<- interface{}) err
 	deadline := now.Add(-offlineAfter)
 	err := db.Main.View(func(tx *bolt.Tx) error {
 		return db.Main.ForEach(tx, m, func(cursor *bolt.Cursor) (bool, error) {
+			mac := db.ResolveAlias(tx, alfred.HardwareAddr(m.Key()))
 			if m.Updated.Before(deadline) {
 				// node is offline
-				l := NewCountNodeClients(m.Key(), now, NODE_OFFLINE)
+				l := NewCountNodeClients(mac, now, NODE_OFFLINE)
 				db.logCount(l)
 				return false, nil
 			}
 			if m.GetItem(s) == nil {
 				if s.Data.Clients != nil {
 					//TODO: log Total or just Wifi? For now: Wifi.
-					l := NewCountNodeClients(m.Key(), m.Updated, s.Data.Clients.Wifi)
+					l := NewCountNodeClients(mac, m.Updated, s.Data.Clients.Wifi)
 					db.logCount(l)
 					clients += s.Data.Clients.Wifi
 				} else {
-					l := NewCountNodeClients(m.Key(), now, 0)
+					l := NewCountNodeClients(mac, now, 0)
 					db.logCount(l)
 				}
 			} else {
-				l := NewCountNodeClients(m.Key(), now, NODE_DATAERROR)
+				l := NewCountNodeClients(mac, now, NODE_DATAERROR)
 				db.logCount(l)
 			}
 			nodes += 1
@@ -322,8 +323,10 @@ func (db *NodeDB) GetLogSamples(logitem Counter, start time.Time, over time.Dura
 func (db *NodeDB) GenerateLogitemSamplesJSON(w io.Writer, logitem Counter, start time.Time, over time.Duration, samples int) error {
 	enc := json.NewEncoder(w)
 	samplelist := make([]LogSample, samples)
+	i := samples
 	db.GetLogSamples(logitem, start, over, samples, func(sample LogSample) {
-		samplelist = append(samplelist, sample)
+		i--
+		samplelist[i] = sample
 	})
 	return enc.Encode(samplelist)
 }

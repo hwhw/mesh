@@ -34,7 +34,7 @@ func (db *NodeDB) updateStatistics(s *Statistics) func() error {
 			if err == nil && s.Statistics.Data.Gateway != nil {
 				// put entry in Gateway table
 				g := &Gateway{}
-				mac := db.resolveAlias(tx, *s.Statistics.Data.Gateway)
+				mac := db.ResolveAlias(tx, *s.Statistics.Data.Gateway)
 				g.SetKey(mac)
 				m := store.NewMeta(g)
 				m.InvalidateIn(db.validTimeVisData)

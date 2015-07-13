@@ -113,7 +113,7 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 				data.Statistics.Clients = statdata.Clients.Total
 			}
 			if statdata.Gateway != nil {
-				g := db.resolveAlias(tx, *statdata.Gateway)
+				g := db.ResolveAlias(tx, *statdata.Gateway)
 				data.Statistics.Gateway = &g
 			}
 			data.Statistics.LoadAvg = statdata.LoadAvg
@@ -137,8 +137,9 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 
 	// set gateway flag when we have the node's address in
 	// our list of gateways
-	mac := db.resolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
+	mac := db.ResolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
 	data.Flags.Gateway = db.Main.Exists(tx, mac, &Gateway{})
+	data.NodeInfo.NodeID = mac
 
 	// online state is determined by the time we have last
 	// seen a mesh node
@@ -167,7 +168,7 @@ func (db *NodeDB) GenerateNodesJSON(w io.Writer, offlineDuration time.Duration) 
 			return db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
 				data, err := db.getNodesJSONData(tx, nmeta, offlineDuration)
 				if err == nil {
-					nodejs.Nodes[alfred.HardwareAddr(nmeta.Key()).String()] = data
+					nodejs.Nodes[data.NodeInfo.NodeID.String()] = data
 				} else {
 					log.Printf("NodeDB: can not generate node info JSON for %v: %v", alfred.HardwareAddr(nmeta.Key()), err)
 				}

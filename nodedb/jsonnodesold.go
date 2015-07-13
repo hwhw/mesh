@@ -112,7 +112,7 @@ func (db *NodeDB) getNodesOldJSONData(tx *bolt.Tx, nmeta *store.Meta, mac alfred
 				data.ClientCount = statdata.Clients.Total
 			}
 			if statdata.Gateway != nil {
-				g := db.resolveAlias(tx, *statdata.Gateway)
+				g := db.ResolveAlias(tx, *statdata.Gateway)
 				data.Gateway = &g
 			}
 		}
@@ -161,7 +161,7 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 			nodeinfo := &NodeInfo{}
 			nmeta := store.NewMeta(nodeinfo)
 			err := db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
-				mac := db.resolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
+				mac := db.ResolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
 				data, err := db.getNodesOldJSONData(tx, nmeta, mac, offlineDuration)
 				if err == nil {
 					nodes[mac.String()] = len(nodejs.Nodes)
@@ -185,7 +185,7 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 					return false, nil
 				}
 				// main address is the first element in batadv.VisV1.Ifaces
-				mac := db.resolveAlias(tx, d.Ifaces[0].Mac)
+				mac := db.ResolveAlias(tx, d.Ifaces[0].Mac)
 				source, ok := nodes[mac.String()]
 				if !ok {
 					return false, nil
@@ -199,7 +199,7 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 						// TT entry, we do not cover these
 						continue
 					}
-					emac := db.resolveAlias(tx, []byte(entry.Mac))
+					emac := db.ResolveAlias(tx, []byte(entry.Mac))
 					target, ok := nodes[emac.String()]
 					if !ok {
 						continue

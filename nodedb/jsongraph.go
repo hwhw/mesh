@@ -27,6 +27,7 @@ type GraphJSONBatAdv struct {
 type GraphJSONNode struct {
 	NodeID alfred.HardwareAddr `json:"node_id,omitempty"`
 	ID     alfred.HardwareAddr `json:"id"`
+	Number int                 `json:"number"`
 }
 
 // Information about a link.
@@ -40,28 +41,17 @@ type GraphJSONLink struct {
 	Tq       float64 `json:"tq"`
 }
 
-func NewGraphJSONNode(id alfred.HardwareAddr, nodeid alfred.HardwareAddr) GraphJSONNode {
+func NewGraphJSONNode(id alfred.HardwareAddr, nodeid alfred.HardwareAddr, number int) GraphJSONNode {
 	idcopy := make(alfred.HardwareAddr, len(id))
 	copy(idcopy, id)
 	nodeidcopy := make(alfred.HardwareAddr, len(nodeid))
 	copy(nodeidcopy, nodeid)
-	return GraphJSONNode{ID: idcopy, NodeID: nodeidcopy}
+	return GraphJSONNode{ID: idcopy, NodeID: nodeidcopy, Number: number}
 }
-func NewGraphJSONNodeIDonly(id alfred.HardwareAddr) GraphJSONNode {
+func NewGraphJSONNodeIDonly(id alfred.HardwareAddr, number int) GraphJSONNode {
 	idcopy := make(alfred.HardwareAddr, len(id))
 	copy(idcopy, id)
-	return GraphJSONNode{ID: idcopy}
-}
-
-func (db *NodeDB) resolveAlias(tx *bolt.Tx, alias alfred.HardwareAddr) alfred.HardwareAddr {
-	a := &Alias{}
-	m := store.NewMeta(a)
-	if db.Main.Get(tx, alias, m) == nil && m.GetItem(a) == nil {
-		if bytes, err := a.Bytes(); err == nil {
-			return alfred.HardwareAddr(bytes)
-		}
-	}
-	return alias
+	return GraphJSONNode{ID: idcopy, Number: number}
 }
 
 // Write a full graph.json document based on the contents of
@@ -87,13 +77,13 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) {
 					return false, nil
 				}
 				// main address is the first element in batadv.VisV1.Ifaces
-				mac := db.resolveAlias(tx, d.Ifaces[0].Mac)
+				mac := db.ResolveAlias(tx, d.Ifaces[0].Mac)
 				isgateway := db.Main.Exists(tx, mac, &Gateway{})
-				nodeid := d.Mac
+				nodeid := mac
 				if _, seen := nodes[mac.String()]; !seen {
 					// new node, put into lists
 					nodes[mac.String()] = len(nodesjs)
-					nodesjs = append(nodesjs, NewGraphJSONNode(mac, nodeid))
+					nodesjs = append(nodesjs, NewGraphJSONNode(mac, nodeid, len(nodesjs)))
 				} else {
 					// record node_id, since we only get that here
 					nodesjs[nodes[mac.String()]].NodeID = nodeid
@@ -106,11 +96,11 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) {
 						continue
 					}
 
-					emac := db.resolveAlias(tx, []byte(entry.Mac))
+					emac := db.ResolveAlias(tx, []byte(entry.Mac))
 					if _, seen := nodes[emac.String()]; !seen {
 						// linked node is a new node, also put into lists since it has to exist
 						nodes[emac.String()] = len(nodesjs)
-						nodesjs = append(nodesjs, NewGraphJSONNodeIDonly(emac))
+						nodesjs = append(nodesjs, NewGraphJSONNodeIDonly(emac, len(nodesjs)))
 					}
 
 					// do a cross check: did we already record an entry for the

@@ -3,6 +3,7 @@
 package nodedb
 
 import (
+	"github.com/boltdb/bolt"
 	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/store"
 	"github.com/tv42/topic"
@@ -97,4 +98,15 @@ func (db *NodeDB) StartUpdater(client *alfred.Client, updatewait, retrywait time
 
 func (db *NodeDB) StopUpdater() {
 	db.NotifyQuitUpdater.Broadcast <- struct{}{}
+}
+
+func (db *NodeDB) ResolveAlias(tx *bolt.Tx, alias alfred.HardwareAddr) alfred.HardwareAddr {
+	a := &Alias{}
+	m := store.NewMeta(a)
+	if db.Main.Get(tx, alias, m) == nil && m.GetItem(a) == nil {
+		if bytes, err := a.Bytes(); err == nil {
+			return alfred.HardwareAddr(bytes)
+		}
+	}
+	return alias
 }
