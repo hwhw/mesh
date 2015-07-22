@@ -14,6 +14,10 @@ var httpPtr = flag.String(
 	"http",
 	":8080",
 	"listen on this address for HTTP requests, leave empty to disable")
+var httpAdminPtr = flag.String(
+	"adminhttp",
+	"127.0.0.1:8081",
+	"listen on this address for administrative HTTP requests")
 var updateWaitPtr = flag.Duration(
 	"updatewait",
 	time.Second*60,
@@ -107,6 +111,6 @@ func main() {
 		select {}
 	} else {
 		log.Printf("starting HTTP server")
-		webservice.Run(db, *httpPtr, *httpdStaticPtr, *nodeOfflineDuration)
+		webservice.Run(db, *httpPtr, *httpAdminPtr, *httpdStaticPtr, *nodeOfflineDuration)
 	}
 }
