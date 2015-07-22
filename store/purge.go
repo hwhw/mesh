@@ -18,10 +18,11 @@ func (b *DB) Purger(itemtype Item, interval time.Duration, notifyQuit, notifyPur
 	quit := make(chan interface{})
 	notifyQuit.Register(quit)
 	defer notifyQuit.Unregister(quit)
+    actionloop:
 	for {
 		select {
 		case <-quit:
-			break
+			break actionloop
 		case <-time.After(interval):
 			meta := NewMeta(itemtype)
 			b.Update(func(tx *bolt.Tx) error {
