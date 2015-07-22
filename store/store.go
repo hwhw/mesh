@@ -109,6 +109,15 @@ func (b *DB) Put(tx *bolt.Tx, item Item) error {
 	return err
 }
 
+// delete an item
+func (b *DB) Delete(tx *bolt.Tx, item Item) error {
+	bucket := tx.Bucket(item.StoreID())
+	if bucket == nil {
+		return ErrNotFound
+	}
+	return bucket.Delete(item.Key())
+}
+
 // update a record that is encapsuled in a Meta struct
 func (b *DB) UpdateMeta(tx *bolt.Tx, olditem *Meta, newitem *Meta) error {
 	err := b.Get(tx, newitem.Key(), olditem)
