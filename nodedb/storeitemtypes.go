@@ -3,6 +3,7 @@ package nodedb
 import (
 	"bytes"
 	"encoding/gob"
+    "encoding/binary"
 	"errors"
 	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/batadvvis"
@@ -158,18 +159,16 @@ func (n *Count) SetCount(count int) {
 	n.Count = count
 }
 func (n *Count) Bytes() ([]byte, error) {
-	c := []byte{
-		byte(n.Count & 0xFF),
-		byte(n.Count & 0xFF00 >> 8),
-		byte(n.Count & 0xFF0000 >> 16),
-		byte(n.Count & 0x7F000000 >> 24)}
-	return c, nil
+    c := make([]byte, 10)
+    i := binary.PutVarint(c, int64(n.Count))
+    return c[0:i], nil
 }
 func (n *Count) DeserializeFrom(d []byte) error {
-	if len(d) != 4 {
+    val, i := binary.Varint(d)
+    if i <= 0 {
 		return ErrInvalid
 	}
-	n.Count = int(d[0]) + int(d[1])<<8 + int(d[2])<<16 + int(d[3])<<24
+	n.Count = int(val)
 	return nil
 }
 
