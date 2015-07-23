@@ -47,7 +47,7 @@ func (db *NodeDB) ExportStatistics(w io.Writer) {
 	data := db.cacheExportStatistics.get(func() []byte {
 		buf := new(bytes.Buffer)
 		buf.Write([]byte{'['})
-		db.Main.View(db.jsonexport(w, &Statistics{}))
+		db.Main.View(db.jsonexport(buf, &Statistics{}))
 		buf.Write([]byte{']'})
 		return buf.Bytes()
 	})
@@ -58,7 +58,7 @@ func (db *NodeDB) ExportVisData(w io.Writer) {
 	data := db.cacheExportVisData.get(func() []byte {
 		buf := new(bytes.Buffer)
 		buf.Write([]byte{'['})
-		db.Main.View(db.jsonexport(w, &VisData{}))
+		db.Main.View(db.jsonexport(buf, &VisData{}))
 		buf.Write([]byte{']'})
 		return buf.Bytes()
 	})
