@@ -18,7 +18,7 @@ func (b *DB) Purger(itemtype Item, interval time.Duration, notifyQuit, notifyPur
 	quit := make(chan interface{})
 	notifyQuit.Register(quit)
 	defer notifyQuit.Unregister(quit)
-    actionloop:
+actionloop:
 	for {
 		select {
 		case <-quit:

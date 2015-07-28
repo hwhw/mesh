@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/boltdb/bolt"
-	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/store"
 	"io"
 	"log"
@@ -103,26 +102,23 @@ func (db *NodeDB) count(offlineAfter time.Duration, done chan<- interface{}) err
 	deadline := now.Add(-offlineAfter)
 	err := db.Main.View(func(tx *bolt.Tx) error {
 		return db.Main.ForEach(tx, m, func(cursor *bolt.Cursor) (bool, error) {
-			mac := db.ResolveAlias(tx, alfred.HardwareAddr(m.Key()))
-			if m.Updated.Before(deadline) {
-				// node is offline
-				l := NewCountNodeClients(mac, now, NODE_OFFLINE)
-				db.logCount(l)
-				return false, nil
-			}
 			if m.GetItem(s) == nil {
+				nodeid := s.Data.NodeID
+				if m.Updated.Before(deadline) {
+					// node is offline
+					l := NewCountNodeClients(nodeid, now, NODE_OFFLINE)
+					db.logCount(l)
+					return false, nil
+				}
 				if s.Data.Clients != nil {
 					//TODO: log Total or just Wifi? For now: Wifi.
-					l := NewCountNodeClients(mac, m.Updated, s.Data.Clients.Wifi)
+					l := NewCountNodeClients(nodeid, m.Updated, s.Data.Clients.Wifi)
 					db.logCount(l)
 					clients += s.Data.Clients.Wifi
 				} else {
-					l := NewCountNodeClients(mac, now, 0)
+					l := NewCountNodeClients(nodeid, now, 0)
 					db.logCount(l)
 				}
-			} else {
-				l := NewCountNodeClients(mac, now, NODE_DATAERROR)
-				db.logCount(l)
 			}
 			nodes += 1
 			return false, nil
@@ -140,10 +136,10 @@ func (db *NodeDB) count(offlineAfter time.Duration, done chan<- interface{}) err
 // generate a JSON list of nodes for which there is log data available
 func (db *NodeDB) GenerateLogList(w io.Writer) error {
 	enc := json.NewEncoder(w)
-	list := make([]alfred.HardwareAddr, 0, 100)
+	list := make([]string, 0, 100)
 	db.Logs.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
-			list = append(list, alfred.HardwareAddr(name))
+			list = append(list, string(name))
 			return nil
 		})
 	})

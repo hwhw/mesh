@@ -82,14 +82,13 @@ func Run(db *nodedb.NodeDB, addr string, addradmin string, staticDir string, nod
 	ra.HandleFunc("/export/nodeinfo.json", ws.handler_export_nodeinfo_json)
 	ra.HandleFunc("/export/statistics.json", ws.handler_export_statistics_json)
 	ra.HandleFunc("/export/visdata.json", ws.handler_export_visdata_json)
-	ra.HandleFunc("/export/aliases.json", ws.handler_export_aliases_json)
 	ra.HandleFunc("/log/{id}", ws.handler_logdata_json).Methods("GET")
 	ra.HandleFunc("/log/{id}/{timestamp}", ws.handler_logdata_delete).Methods("DELETE")
-    ra.HandleFunc("/log/{what}", ws.handler_logdata_post).Methods("POST")
+	ra.HandleFunc("/log/{what}", ws.handler_logdata_post).Methods("POST")
 	ra.HandleFunc("/log/", ws.handler_loglist_json).Methods("GET")
 
 	log.Printf("HTTP: server listening on %s", addr)
 
-    go http.ListenAndServe(addr, HTTPLog(HTTPError(HTTPGzip(r)), "public"))
-    http.ListenAndServe(addradmin, HTTPLog(HTTPError(HTTPGzip(ra)), "admin"))
+	go http.ListenAndServe(addr, HTTPLog(HTTPError(HTTPGzip(r)), "public"))
+	http.ListenAndServe(addradmin, HTTPLog(HTTPError(HTTPGzip(ra)), "admin"))
 }

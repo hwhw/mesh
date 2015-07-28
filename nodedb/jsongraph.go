@@ -25,7 +25,7 @@ type GraphJSONBatAdv struct {
 
 // Information about the existence of a mesh node
 type GraphJSONNode struct {
-	NodeID alfred.HardwareAddr `json:"node_id,omitempty"`
+	NodeID string              `json:"node_id,omitempty"`
 	ID     alfred.HardwareAddr `json:"id"`
 	Number int                 `json:"number"`
 }
@@ -41,12 +41,10 @@ type GraphJSONLink struct {
 	Tq       float64 `json:"tq"`
 }
 
-func NewGraphJSONNode(id alfred.HardwareAddr, nodeid alfred.HardwareAddr, number int) GraphJSONNode {
+func NewGraphJSONNode(id alfred.HardwareAddr, nodeid string, number int) GraphJSONNode {
 	idcopy := make(alfred.HardwareAddr, len(id))
 	copy(idcopy, id)
-	nodeidcopy := make(alfred.HardwareAddr, len(nodeid))
-	copy(nodeidcopy, nodeid)
-	return GraphJSONNode{ID: idcopy, NodeID: nodeidcopy, Number: number}
+	return GraphJSONNode{ID: idcopy, NodeID: nodeid, Number: number}
 }
 func NewGraphJSONNodeIDonly(id alfred.HardwareAddr, number int) GraphJSONNode {
 	idcopy := make(alfred.HardwareAddr, len(id))
@@ -77,16 +75,12 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) {
 					return false, nil
 				}
 				// main address is the first element in batadv.VisV1.Ifaces
-				mac := db.ResolveAlias(tx, d.Ifaces[0].Mac)
-				isgateway := db.Main.Exists(tx, mac, &Gateway{})
-				nodeid := mac
-				if _, seen := nodes[mac.String()]; !seen {
+				nodeid, _ := db.ResolveNodeID(tx, d.Ifaces[0].Mac)
+				isgateway := db.Main.Exists(tx, []byte(nodeid), &Gateway{})
+				if _, seen := nodes[nodeid]; !seen {
 					// new node, put into lists
-					nodes[mac.String()] = len(nodesjs)
-					nodesjs = append(nodesjs, NewGraphJSONNode(mac, nodeid, len(nodesjs)))
-				} else {
-					// record node_id, since we only get that here
-					nodesjs[nodes[mac.String()]].NodeID = nodeid
+					nodes[nodeid] = len(nodesjs)
+					nodesjs = append(nodesjs, NewGraphJSONNode(d.VisV1.Mac, nodeid, len(nodesjs)))
 				}
 
 				nodelinks := make(map[string]GraphJSONLink)
@@ -96,34 +90,34 @@ func (db *NodeDB) GenerateGraphJSON(w io.Writer) {
 						continue
 					}
 
-					emac := db.ResolveAlias(tx, []byte(entry.Mac))
-					if _, seen := nodes[emac.String()]; !seen {
+					enodeid, _ := db.ResolveNodeID(tx, []byte(entry.Mac))
+					if _, seen := nodes[enodeid]; !seen {
 						// linked node is a new node, also put into lists since it has to exist
-						nodes[emac.String()] = len(nodesjs)
-						nodesjs = append(nodesjs, NewGraphJSONNodeIDonly(emac, len(nodesjs)))
+						nodes[enodeid] = len(nodesjs)
+						nodesjs = append(nodesjs, NewGraphJSONNode(entry.Mac, enodeid, len(nodesjs)))
 					}
 
 					// do a cross check: did we already record an entry for the
 					// reverse direction? If so, mark it as being birectional
 					// and recalculate the link quality value
-					if rev, exists := links[emac.String()]; exists {
-						if rrev, exists := rev[mac.String()]; exists {
+					if rev, exists := links[enodeid]; exists {
+						if rrev, exists := rev[nodeid]; exists {
 							if isgateway {
 								rrev.Vpn = true
 							}
 							rrev.Bidirect = true
 							// middle value for now - or should we chose bigger (worse) value?
 							rrev.Tq = (rrev.Tq + 255.0/float64(entry.Qual)) / 2
-							links[emac.String()][mac.String()] = rrev
+							links[enodeid][nodeid] = rrev
 							continue
 						}
 					}
 
 					// new link, record it
-					nodelinks[emac.String()] = GraphJSONLink{Tq: 255.0 / float64(entry.Qual), Vpn: isgateway}
+					nodelinks[enodeid] = GraphJSONLink{Tq: 255.0 / float64(entry.Qual), Vpn: isgateway}
 				}
 
-				links[mac.String()] = nodelinks
+				links[nodeid] = nodelinks
 				return false, nil
 			})
 		})

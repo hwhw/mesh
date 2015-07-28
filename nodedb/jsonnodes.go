@@ -113,8 +113,7 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 				data.Statistics.Clients = statdata.Clients.Total
 			}
 			if statdata.Gateway != nil {
-				g := db.ResolveAlias(tx, *statdata.Gateway)
-				data.Statistics.Gateway = &g
+				data.Statistics.Gateway = statdata.Gateway
 			}
 			data.Statistics.LoadAvg = statdata.LoadAvg
 			data.Statistics.RootFSUsage = statdata.RootFSUsage
@@ -137,9 +136,8 @@ func (db *NodeDB) getNodesJSONData(tx *bolt.Tx, nmeta *store.Meta, offlineDurati
 
 	// set gateway flag when we have the node's address in
 	// our list of gateways
-	mac := db.ResolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
-	data.Flags.Gateway = db.Main.Exists(tx, mac, &Gateway{})
-	data.NodeInfo.NodeID = mac
+	nodeid, _ := db.ResolveNodeID(tx, alfred.HardwareAddr(nmeta.Key()))
+	data.Flags.Gateway = db.Main.Exists(tx, []byte(nodeid), &Gateway{})
 
 	// online state is determined by the time we have last
 	// seen a mesh node
@@ -168,7 +166,7 @@ func (db *NodeDB) GenerateNodesJSON(w io.Writer, offlineDuration time.Duration) 
 			return db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
 				data, err := db.getNodesJSONData(tx, nmeta, offlineDuration)
 				if err == nil {
-					nodejs.Nodes[data.NodeInfo.NodeID.String()] = data
+					nodejs.Nodes[data.NodeInfo.NodeID] = data
 				} else {
 					log.Printf("NodeDB: can not generate node info JSON for %v: %v", alfred.HardwareAddr(nmeta.Key()), err)
 				}
@@ -205,7 +203,12 @@ func (db *NodeDB) ImportNodes(r io.Reader, persistent bool) error {
 		return ErrUnknownVersion
 	}
 	for _, node := range nodes.Nodes {
-		n := &NodeInfo{NodeInfo: gluon.NodeInfo{Source: node.NodeInfo.NodeID, Data: &node.NodeInfo}}
+		var addr alfred.HardwareAddr
+		if err := addr.Parse(node.NodeInfo.NodeID); err != nil {
+			log.Printf("Import: error parsing NodeID %s: %v, skipping", node.NodeInfo.NodeID, err)
+			continue
+		}
+		n := &NodeInfo{NodeInfo: gluon.NodeInfo{Source: addr, Data: &node.NodeInfo}}
 		m := store.NewMeta(n)
 		m.Updated = time.Time(node.LastSeen).Local()
 		m.Created = time.Time(node.FirstSeen).Local()

@@ -1,14 +1,13 @@
 package webservice
 
 import (
-    "net/http"
+	"encoding/json"
+	"github.com/boltdb/bolt"
 	"github.com/gorilla/mux"
-    "github.com/hwhw/mesh/alfred"
-    "github.com/hwhw/mesh/nodedb"
-    "time"
-    "strconv"
-    "encoding/json"
-    "github.com/boltdb/bolt"
+	"github.com/hwhw/mesh/nodedb"
+	"net/http"
+	"strconv"
+	"time"
 )
 
 func (ws *Webservice) handler_loglist_json(w http.ResponseWriter, r *http.Request) {
@@ -24,25 +23,25 @@ func (ws *Webservice) handler_logdata_post(w http.ResponseWriter, r *http.Reques
 		counter = &nodedb.CountMeshClients{}
 	case "nodes":
 		counter = &nodedb.CountMeshNodes{}
-    case "node":
-        counter = &nodedb.CountNodeClients{Node:alfred.HardwareAddr{}}
+	case "node":
+		counter = &nodedb.CountNodeClients{}
 	default:
-        http.Error(w, "Bad Request", 400)
-        return
+		http.Error(w, "Bad Request", 400)
+		return
 	}
-    dec := json.NewDecoder(r.Body)
-    err := dec.Decode(counter)
+	dec := json.NewDecoder(r.Body)
+	err := dec.Decode(counter)
 	if err == nil {
-        err = ws.db.Logs.Batch(func(tx *bolt.Tx) error {
-            return ws.db.Logs.Put(tx, counter)
-        })
-    }
-    if err != nil {
-        http.Error(w, "Bad Request", 400)
-        return
-    }
+		err = ws.db.Logs.Batch(func(tx *bolt.Tx) error {
+			return ws.db.Logs.Put(tx, counter)
+		})
+	}
+	if err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
 	w.Header().Set("Content-type", "application/json")
-    w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusCreated)
 	ws.db.GenerateLogJSON(w, counter)
 }
 
@@ -55,13 +54,7 @@ func (ws *Webservice) handler_logdata_json(w http.ResponseWriter, r *http.Reques
 	case "nodes":
 		counter = &nodedb.CountMeshNodes{}
 	default:
-		addr := &alfred.HardwareAddr{}
-		err := addr.Parse(vars["id"])
-		if err != nil {
-			http.Error(w, "Bad Request", 400)
-			return
-		}
-		counter = &nodedb.CountNodeClients{Node: *addr}
+		counter = &nodedb.CountNodeClients{Node: vars["id"]}
 	}
 	w.Header().Set("Content-type", "application/json")
 	ws.db.GenerateLogJSON(w, counter)
@@ -72,32 +65,26 @@ func (ws *Webservice) handler_logdata_delete(w http.ResponseWriter, r *http.Requ
 	var counter nodedb.Counter
 	switch vars["id"] {
 	case "clients":
-        counter = &nodedb.CountMeshClients{}
+		counter = &nodedb.CountMeshClients{}
 	case "nodes":
-        counter = &nodedb.CountMeshNodes{}
+		counter = &nodedb.CountMeshNodes{}
 	default:
-		addr := &alfred.HardwareAddr{}
-        err := addr.Parse(vars["id"])
-		if err != nil {
-			http.Error(w, "Bad Request", 400)
-			return
-		}
-        counter = &nodedb.CountNodeClients{Node: *addr}
+		counter = &nodedb.CountNodeClients{Node: vars["id"]}
 	}
-    var timestamp time.Time
-    err := timestamp.UnmarshalText([]byte(vars["timestamp"]))
-    if err != nil {
-        http.Error(w, "Bad Request", 400)
-        return
-    }
-    counter.SetTimestamp(timestamp)
-    err = ws.db.Logs.Update(func (tx *bolt.Tx) error {
-        return ws.db.Logs.Delete(tx, counter)
-    })
-    if err != nil {
-        http.Error(w, "Not Found", 404)
-        return
-    }
+	var timestamp time.Time
+	err := timestamp.UnmarshalText([]byte(vars["timestamp"]))
+	if err != nil {
+		http.Error(w, "Bad Request", 400)
+		return
+	}
+	counter.SetTimestamp(timestamp)
+	err = ws.db.Logs.Update(func(tx *bolt.Tx) error {
+		return ws.db.Logs.Delete(tx, counter)
+	})
+	if err != nil {
+		http.Error(w, "Not Found", 404)
+		return
+	}
 	w.Header().Set("Content-type", "application/json")
 	ws.db.GenerateLogJSON(w, counter)
 }
@@ -122,16 +109,9 @@ func (ws *Webservice) handler_logsamples_json(w http.ResponseWriter, r *http.Req
 	case "nodes":
 		counter = &nodedb.CountMeshNodes{}
 	default:
-		addr := &alfred.HardwareAddr{}
-		err := addr.Parse(vars["id"])
-		if err != nil {
-			http.Error(w, "Bad Request", 400)
-			return
-		}
-		counter = &nodedb.CountNodeClients{Node: *addr}
+		counter = &nodedb.CountNodeClients{Node: vars["id"]}
 	}
 	w.Header().Set("Content-type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	ws.db.GenerateLogitemSamplesJSON(w, counter, start, over, samples)
 }
-

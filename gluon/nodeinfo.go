@@ -20,13 +20,13 @@ type NodeInfo struct {
 
 // mesh node metadata
 type NodeInfoData struct {
-	NodeID   alfred.HardwareAddr `json:"node_id,omitempty"`
-	Network  *Network            `json:"network,omitempty"`
-	Hostname string              `json:"hostname,omitempty"`
-	Location *Location           `json:"location,omitempty"`
-	Software *Software           `json:"software,omitempty"`
-	Hardware *Hardware           `json:"hardware,omitempty"`
-	Owner    *Owner              `json:"owner,omitempty"`
+	NodeID   string    `json:"node_id,omitempty"`
+	Network  *Network  `json:"network,omitempty"`
+	Hostname string    `json:"hostname,omitempty"`
+	Location *Location `json:"location,omitempty"`
+	Software *Software `json:"software,omitempty"`
+	Hardware *Hardware `json:"hardware,omitempty"`
+	Owner    *Owner    `json:"owner,omitempty"`
 }
 
 type Network struct {

@@ -2,10 +2,9 @@ package nodedb
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/gob"
-    "encoding/binary"
 	"errors"
-	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/batadvvis"
 	"github.com/hwhw/mesh/gluon"
 	"github.com/hwhw/mesh/store"
@@ -26,7 +25,7 @@ func (n *NodeInfo) Bytes() ([]byte, error) {
 	return itembuf.Bytes(), err
 }
 func (n *NodeInfo) Key() []byte {
-	return []byte(n.NodeInfo.Data.NodeID)
+	return []byte(n.NodeInfo.Source)
 }
 
 var nodeInfoStoreID = []byte("NodeInfo")
@@ -54,7 +53,7 @@ func (s *Statistics) Bytes() ([]byte, error) {
 	return itembuf.Bytes(), err
 }
 func (s *Statistics) Key() []byte {
-	return []byte(s.Data.NodeID)
+	return []byte(s.Source)
 }
 
 var statisticsStoreID = []byte("Statistics")
@@ -82,7 +81,7 @@ func (v *VisData) Bytes() ([]byte, error) {
 	return itembuf.Bytes(), err
 }
 func (v *VisData) Key() []byte {
-	return []byte(v.VisV1.Ifaces[0].Mac)
+	return []byte(v.VisV1.Mac)
 }
 
 var visdataStoreID = []byte("VisData")
@@ -98,18 +97,12 @@ func (v *VisData) DeserializeFrom(b []byte) error {
 	return err
 }
 
-type Alias struct{ store.Byte }
+type NodeID struct{ store.Byte }
 
-var aliasStoreID = []byte("Aliases")
+var nodeIDStoreID = []byte("NodeID")
 
-func NewAlias(alias alfred.HardwareAddr, main alfred.HardwareAddr) *Alias {
-	a := &Alias{}
-	a.SetKey(alias)
-	a.Set(main)
-	return a
-}
-func (a *Alias) StoreID() []byte {
-	return aliasStoreID
+func (n *NodeID) StoreID() []byte {
+	return nodeIDStoreID
 }
 
 type Gateway struct{ store.Flag }
@@ -159,13 +152,13 @@ func (n *Count) SetCount(count int) {
 	n.Count = count
 }
 func (n *Count) Bytes() ([]byte, error) {
-    c := make([]byte, 10)
-    i := binary.PutVarint(c, int64(n.Count))
-    return c[0:i], nil
+	c := make([]byte, 10)
+	i := binary.PutVarint(c, int64(n.Count))
+	return c[0:i], nil
 }
 func (n *Count) DeserializeFrom(d []byte) error {
-    val, i := binary.Varint(d)
-    if i <= 0 {
+	val, i := binary.Varint(d)
+	if i <= 0 {
 		return ErrInvalid
 	}
 	n.Count = int(val)
@@ -174,15 +167,15 @@ func (n *Count) DeserializeFrom(d []byte) error {
 
 type CountNodeClients struct {
 	Count
-	Node alfred.HardwareAddr
+	Node string
 }
 
-func NewCountNodeClients(node alfred.HardwareAddr, timestamp time.Time, count int) *CountNodeClients {
+func NewCountNodeClients(node string, timestamp time.Time, count int) *CountNodeClients {
 	n := &CountNodeClients{Node: node, Count: Count{Timestamp: timestamp, Count: count}}
 	return n
 }
 func (c *CountNodeClients) StoreID() []byte {
-	return c.Node
+	return []byte(c.Node)
 }
 
 type CountMeshClients struct{ Count }

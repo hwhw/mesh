@@ -3,9 +3,7 @@ package nodedb
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/boltdb/bolt"
-	"github.com/hwhw/mesh/alfred"
 	"github.com/hwhw/mesh/store"
 	"io"
 )
@@ -59,36 +57,6 @@ func (db *NodeDB) ExportVisData(w io.Writer) {
 		buf := new(bytes.Buffer)
 		buf.Write([]byte{'['})
 		db.Main.View(db.jsonexport(buf, &VisData{}))
-		buf.Write([]byte{']'})
-		return buf.Bytes()
-	})
-	w.Write(data)
-}
-
-func (db *NodeDB) ExportAliases(w io.Writer) {
-	data := db.cacheExportVisData.get(func() []byte {
-		buf := new(bytes.Buffer)
-		buf.Write([]byte{'['})
-		db.Main.View(func(tx *bolt.Tx) error {
-			a := &Alias{}
-			m := store.NewMeta(a)
-			b := tx.Bucket(a.StoreID())
-			if b == nil {
-				return nil
-			}
-			first := true
-			return b.ForEach(func(address []byte, aliasdata []byte) error {
-				m.DeserializeFrom(aliasdata)
-				m.GetItem(a)
-				if first {
-					first = false
-				} else {
-					buf.Write([]byte{','})
-				}
-				fmt.Fprintf(buf, "{\"%s\": \"%s\"}", alfred.HardwareAddr(address), alfred.HardwareAddr(a.Get()))
-				return nil
-			})
-		})
 		buf.Write([]byte{']'})
 		return buf.Bytes()
 	})

@@ -19,7 +19,7 @@ type Statistics struct {
 
 // mesh node statistics
 type StatisticsData struct {
-	NodeID      alfred.HardwareAddr  `json:"node_id"`
+	NodeID      string               `json:"node_id"`
 	Clients     *Clients             `json:"clients,omitempty"`
 	RootFSUsage float64              `json:"rootfs_usage,omitempty"`
 	LoadAvg     float64              `json:"loadavg,omitempty"`

@@ -1,7 +1,7 @@
 package webservice
 
 import (
-    "net/http"
+	"net/http"
 )
 
 func (ws *Webservice) handler_nodes_json(w http.ResponseWriter, r *http.Request) {
@@ -32,9 +32,4 @@ func (ws *Webservice) handler_export_statistics_json(w http.ResponseWriter, r *h
 func (ws *Webservice) handler_export_visdata_json(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	ws.db.ExportVisData(w)
-}
-
-func (ws *Webservice) handler_export_aliases_json(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-type", "application/json")
-	ws.db.ExportAliases(w)
 }

@@ -72,7 +72,7 @@ func (db *NodeDB) StartPurger(gluonpurgeint, vispurgeint time.Duration) {
 	go db.Main.Purger(&Statistics{}, gluonpurgeint, db.NotifyQuitPurger, nil)
 	go db.Main.Purger(&VisData{}, vispurgeint, db.NotifyQuitPurger, db.NotifyPurgeVis)
 	go db.Main.Purger(&Gateway{}, vispurgeint, db.NotifyQuitPurger, nil)
-	go db.Main.Purger(&Alias{}, vispurgeint, db.NotifyQuitPurger, nil)
+	go db.Main.Purger(&NodeID{}, vispurgeint, db.NotifyQuitPurger, nil)
 }
 
 func (db *NodeDB) StopPurger() {
@@ -100,13 +100,23 @@ func (db *NodeDB) StopUpdater() {
 	db.NotifyQuitUpdater.Broadcast <- struct{}{}
 }
 
-func (db *NodeDB) ResolveAlias(tx *bolt.Tx, alias alfred.HardwareAddr) alfred.HardwareAddr {
-	a := &Alias{}
-	m := store.NewMeta(a)
-	if db.Main.Get(tx, alias, m) == nil && m.GetItem(a) == nil {
-		if bytes, err := a.Bytes(); err == nil {
-			return alfred.HardwareAddr(bytes)
+func (db *NodeDB) ResolveNodeID(tx *bolt.Tx, mac alfred.HardwareAddr) (string, bool) {
+	id := &NodeID{}
+	m := store.NewMeta(id)
+	if db.Main.Get(tx, mac, m) == nil && m.GetItem(id) == nil {
+		if bytes, err := id.Bytes(); err == nil {
+			return string(bytes), true
 		}
 	}
-	return alias
+	// when we have no nodeID, we return a synthetic one
+	return mac.String(), false
+}
+
+func (db *NodeDB) NewNodeID(tx *bolt.Tx, nodeid string, alias []byte) error {
+	id := &NodeID{}
+	id.SetKey(alias)
+	id.Set([]byte(nodeid))
+	m := store.NewMeta(id)
+	m.InvalidateIn(db.validTimeVisData)
+	return db.Main.Put(tx, m)
 }

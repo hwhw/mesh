@@ -27,7 +27,7 @@ type NodesOldJSON struct {
 
 // Type for the data of a single Mesh node
 type NodesOldJSONData struct {
-	Id                alfred.HardwareAddr  `json:"id"`
+	Id                string               `json:"id"`
 	Name              *string              `json:"name"`
 	LastSeen          int64                `json:"lastseen"`
 	Uptime            float64              `json:"uptime"`
@@ -61,7 +61,7 @@ type NodesOldJSONLink struct {
 
 // Assemble data elements for a mesh node from database.
 // This operation assumes the database is already locked by the caller.
-func (db *NodeDB) getNodesOldJSONData(tx *bolt.Tx, nmeta *store.Meta, mac alfred.HardwareAddr, offlineDuration time.Duration) (*NodesOldJSONData, error) {
+func (db *NodeDB) getNodesOldJSONData(tx *bolt.Tx, nmeta *store.Meta, nodeid string, offlineDuration time.Duration) (*NodesOldJSONData, error) {
 	data := &NodesOldJSONData{}
 
 	ninfo := &NodeInfo{}
@@ -71,7 +71,7 @@ func (db *NodeDB) getNodesOldJSONData(tx *bolt.Tx, nmeta *store.Meta, mac alfred
 	nodeinfo := *ninfo // make a copy
 
 	data.Name = &nodeinfo.Data.Hostname
-	data.Id = mac
+	data.Id = nodeid
 	if nodeinfo.Data.Location != nil {
 		data.Geo = []float64{nodeinfo.Data.Location.Latitude, nodeinfo.Data.Location.Longitude}
 	}
@@ -112,8 +112,7 @@ func (db *NodeDB) getNodesOldJSONData(tx *bolt.Tx, nmeta *store.Meta, mac alfred
 				data.ClientCount = statdata.Clients.Total
 			}
 			if statdata.Gateway != nil {
-				g := db.ResolveAlias(tx, *statdata.Gateway)
-				data.Gateway = &g
+				data.Gateway = statdata.Gateway
 			}
 		}
 	}
@@ -161,13 +160,12 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 			nodeinfo := &NodeInfo{}
 			nmeta := store.NewMeta(nodeinfo)
 			err := db.Main.ForEach(tx, nmeta, func(cursor *bolt.Cursor) (bool, error) {
-				mac := db.ResolveAlias(tx, alfred.HardwareAddr(nmeta.Key()))
-				data, err := db.getNodesOldJSONData(tx, nmeta, mac, offlineDuration)
+				data, err := db.getNodesOldJSONData(tx, nmeta, nodeinfo.Data.NodeID, offlineDuration)
 				if err == nil {
-					nodes[mac.String()] = len(nodejs.Nodes)
+					nodes[nodeinfo.Data.NodeID] = len(nodejs.Nodes)
 					nodejs.Nodes = append(nodejs.Nodes, data)
 				} else {
-					log.Printf("NodeDB: can not generate node info JSON for %v: %v", mac, err)
+					log.Printf("NodeDB: can not generate node info JSON for %v: %v", nodeinfo.Data.NodeID, err)
 				}
 				return false, nil
 			})
@@ -185,8 +183,8 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 					return false, nil
 				}
 				// main address is the first element in batadv.VisV1.Ifaces
-				mac := db.ResolveAlias(tx, d.Ifaces[0].Mac)
-				source, ok := nodes[mac.String()]
+				nodeid, _ := db.ResolveNodeID(tx, d.Ifaces[0].Mac)
+				source, ok := nodes[nodeid]
 				if !ok {
 					return false, nil
 				}
@@ -199,8 +197,8 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 						// TT entry, we do not cover these
 						continue
 					}
-					emac := db.ResolveAlias(tx, []byte(entry.Mac))
-					target, ok := nodes[emac.String()]
+					enodeid, _ := db.ResolveNodeID(tx, []byte(entry.Mac))
+					target, ok := nodes[enodeid]
 					if !ok {
 						continue
 					}
@@ -216,7 +214,7 @@ func (db *NodeDB) GenerateNodesOldJSON(w io.Writer, offlineDuration time.Duratio
 						node.Quality = fmt.Sprintf("%s, %.03f", node.Quality, 255.0/float64(entry.Qual))
 					} else {
 						links[source][target] = &NodesOldJSONLink{
-							Id:      fmt.Sprintf("%s-%s", mac, emac),
+							Id:      fmt.Sprintf("%s-%s", nodeid, enodeid),
 							Source:  source,
 							Target:  target,
 							Quality: fmt.Sprintf("%.03f", 255.0/float64(entry.Qual)),
